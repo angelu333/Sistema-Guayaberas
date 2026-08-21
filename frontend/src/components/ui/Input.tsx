@@ -1,4 +1,4 @@
-﻿import { type InputHTMLAttributes, forwardRef } from "react";
+﻿import { type InputHTMLAttributes, forwardRef, useId } from "react";
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
@@ -13,7 +13,8 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     { label, error, hint, leftIcon, rightIcon, id, className = "", ...rest },
     ref
   ) {
-    const inputId = id ?? `input-${Math.random().toString(36).slice(2, 9)}`;
+    const defaultId = useId();
+    const inputId = id ?? `input-${defaultId}`;
 
     return (
       <div className="flex flex-col gap-1.5 w-full">
