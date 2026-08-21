@@ -1,4 +1,4 @@
-﻿# Plan Maestro de Desarrollo
+# Plan Maestro de Desarrollo
 ## Sistema de Gestión para Tienda y Producción de Guayaberas
 ### Versión del plan: 1.0 — En progreso
 
@@ -228,20 +228,20 @@ Inventario Guayabera/
 ---
 
 ### ETAPA 3 — Inventario y movimientos
-**Estado: Pendiente**
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Migración SQL: ubicaciones, existencias, movimientos_inventario | Pendiente |
-| Configurar RLS para tablas de inventario | Pendiente |
-| Servicio inventory.service.ts | Pendiente |
-| Página de inventario general con filtros avanzados | Pendiente |
-| Vista de existencias por ubicación | Pendiente |
-| Formulario de entrada de inventario | Pendiente |
-| Formulario de ajuste de inventario (con motivo y auditoría) | Pendiente |
-| Historial de movimientos de inventario | Pendiente |
-| Sistema de alertas de bajo stock y agotados | Pendiente |
-| Búsqueda rápida de inventario ("Valladolid blanco 40") | Pendiente |
+| Migración SQL: ubicaciones, existencias, movimientos_inventario | Completado |
+| Configurar RLS para tablas de inventario | Completado |
+| Servicio inventory.service.ts | Completado |
+| Página de inventario general con filtros avanzados | Completado |
+| Vista de existencias por ubicación | Completado |
+| Formulario de entrada de inventario | Completado |
+| Formulario de ajuste de inventario (con motivo y auditoría) | Completado |
+| Historial de movimientos de inventario | Completado |
+| Sistema de alertas de bajo stock y agotados | Completado |
+| Búsqueda rápida de inventario ("Valladolid blanco 40") | Completado |
 
 ---
 
