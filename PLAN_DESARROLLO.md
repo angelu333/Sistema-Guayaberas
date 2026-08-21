@@ -212,7 +212,6 @@ Inventario Guayabera/
 
 ### ETAPA 2 — Catálogo de productos y variantes
 **Estado: Completado**
-**Estado: Pendiente**
 
 | Tarea | Estado |
 |---|---|
