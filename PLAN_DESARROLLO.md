@@ -211,19 +211,20 @@ Inventario Guayabera/
 ---
 
 ### ETAPA 2 — Catálogo de productos y variantes
+**Estado: Completado**
 **Estado: Pendiente**
 
 | Tarea | Estado |
 |---|---|
-| Migración SQL: categorias, colores, tallas, tipos_manga, productos, variantes_producto | Pendiente |
-| Configurar RLS para tablas de productos | Pendiente |
-| Servicio products.service.ts | Pendiente |
-| Página de listado de productos con tabla y filtros | Pendiente |
-| Formulario de creación y edición de productos | Pendiente |
-| Gestión de variantes (tallas, colores, mangas, precios) | Pendiente |
-| Generación automática de SKU único por tenant | Pendiente |
-| Subida de imágenes a Supabase Storage | Pendiente |
-| Vista de detalle de producto y activación/desactivación | Pendiente |
+| Migración SQL: categorias, colores, tallas, tipos_manga, productos, variantes_producto | Completado |
+| Configurar RLS para tablas de productos | Completado |
+| Servicio products.service.ts | Completado |
+| Página de listado de productos con tabla y filtros | Completado |
+| Formulario de creación y edición de productos | Completado |
+| Gestión de variantes (tallas, colores, mangas, precios) | Completado |
+| Generación automática de SKU único por tenant | Completado |
+| Subida de imágenes a Supabase Storage | Completado |
+| Vista de detalle de producto y activación/desactivación | Completado |
 
 ---
 
@@ -390,4 +391,4 @@ Por cada módulo se realizarán:
 
 ---
 
-**Última actualización:** 2026-08-21 — Etapa 1 completada, listo para Etapa 2
+**Última actualización:** 2026-08-21 — Etapa 2 completada, listo para Etapa 3
