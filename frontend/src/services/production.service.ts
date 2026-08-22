@@ -94,7 +94,14 @@ export const productionService = {
 
       if (seedErr || !seeded) {
         console.error("Error al sembrar etapas predeterminadas:", seedErr);
-        return [];
+        return DEFAULT_GUAYABERA_STAGES.map((s, idx) => ({
+          id: `default-stage-${idx + 1}`,
+          tenantId,
+          name: s.name,
+          sortOrder: s.sort_order,
+          isFinal: s.is_final,
+          isActive: true,
+        }));
       }
 
       return seeded.map((row: any) => ({
@@ -107,14 +114,26 @@ export const productionService = {
       }));
     }
 
-    return data.map((row: any) => ({
-      id: row.id,
-      tenantId: row.tenant_id,
-      name: row.name,
-      sortOrder: row.sort_order,
-      isFinal: row.is_final,
-      isActive: row.is_active,
-    }));
+    // Deduplicar etapas por nombre para evitar duplicados en pantalla
+    const uniqueStages: ProductionStage[] = [];
+    const seenNames = new Set<string>();
+
+    data.forEach((row: any) => {
+      const cleanName = (row.name || "").trim().toLowerCase();
+      if (!seenNames.has(cleanName)) {
+        seenNames.add(cleanName);
+        uniqueStages.push({
+          id: row.id,
+          tenantId: row.tenant_id,
+          name: row.name,
+          sortOrder: uniqueStages.length + 1,
+          isFinal: row.is_final,
+          isActive: row.is_active,
+        });
+      }
+    });
+
+    return uniqueStages;
   },
 
   /**
