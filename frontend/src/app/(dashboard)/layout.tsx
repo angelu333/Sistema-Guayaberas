@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { authService } from "@/services/auth.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { useTenantStore } from "@/stores/tenant.store";
 
 export default function DashboardLayout({
   children,
@@ -15,6 +16,7 @@ export default function DashboardLayout({
   const router = useRouter();
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
+  const setTenant = useTenantStore((state) => state.setTenant);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
@@ -24,18 +26,46 @@ export default function DashboardLayout({
           const currentSession = await authService.getCurrentSession();
           if (currentSession) {
             setSession(currentSession);
+            setTenant({
+              id: currentSession.tenantId,
+              name: currentSession.companyName,
+              slug: "",
+              rfc: null,
+              phone: null,
+              email: currentSession.email,
+              address: null,
+              logoUrl: null,
+              whatsapp: null,
+              isActive: true,
+              createdAt: "",
+            });
           } else {
             router.push("/login");
           }
         } catch {
           router.push("/login");
         }
+      } else {
+        // Asegurar que tenant store tenga el tenant activo
+        setTenant({
+          id: session.tenantId,
+          name: session.companyName,
+          slug: "",
+          rfc: null,
+          phone: null,
+          email: session.email,
+          address: null,
+          logoUrl: null,
+          whatsapp: null,
+          isActive: true,
+          createdAt: "",
+        });
       }
       setCheckingAuth(false);
     }
 
     verifyAuth();
-  }, [session, setSession, router]);
+  }, [session, setSession, setTenant, router]);
 
   if (checkingAuth) {
     return (

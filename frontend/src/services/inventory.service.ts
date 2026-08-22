@@ -1,9 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 import type { Location, StockAlert } from "@/types/domain.types";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+const supabase = createClient();
 
 export interface StockItemView {
   id: string;
@@ -53,7 +51,8 @@ export interface RegisterMovementParams {
 
 export const inventoryService = {
   /**
-   * Obtiene la lista de ubicaciones activas del tenant (bodegas/tiendas)
+   * Obtiene la lista de ubicaciones activas del tenant (bodegas/tiendas).
+   * Si el tenant no tiene ninguna creada aun, crea automaticamente "Bodega Principal".
    */
   async getLocations(tenantId: string): Promise<Location[]> {
     const { data, error } = await supabase
@@ -68,78 +67,187 @@ export const inventoryService = {
       return [];
     }
 
-    return (data || []).map((row) => ({
-      id: row.id,
-      tenantId: row.tenant_id,
-      name: row.name,
-      description: row.description,
-      isActive: row.is_active,
-    }));
+    if (data && data.length > 0) {
+      return data.map((row) => ({
+        id: row.id,
+        tenantId: row.tenant_id,
+        name: row.name,
+        description: row.description,
+        isActive: row.is_active,
+      }));
+    }
+
+    // Auto-crear "Bodega Principal" por defecto
+    const { data: newLoc, error: createError } = await supabase
+      .from("ubicaciones")
+      .insert({
+        tenant_id: tenantId,
+        name: "Bodega Principal",
+        description: "Ubicación predeterminada del negocio",
+        is_active: true,
+      })
+      .select()
+      .single();
+
+    if (createError || !newLoc) {
+      console.error("Error al auto-crear ubicación por defecto:", createError);
+      return [];
+    }
+
+    return [{
+      id: newLoc.id,
+      tenantId: newLoc.tenant_id,
+      name: newLoc.name,
+      description: newLoc.description,
+      isActive: newLoc.is_active,
+    }];
   },
 
   /**
-   * Obtiene las existencias desglosadas por variante y ubicación
+   * Obtiene TODAS las variantes del tenant para el modal de ajuste (incluso con stock 0)
+   */
+  async getAllVariantsForAdjustment(tenantId: string): Promise<StockItemView[]> {
+    const { data, error } = await supabase
+      .from("variantes_producto")
+      .select(`
+        id,
+        sku,
+        sale_price,
+        min_stock,
+        productos!inner(
+          name,
+          categorias(name)
+        ),
+        colores(name),
+        tallas(name),
+        tipos_manga(name),
+        existencias(
+          quantity,
+          location_id,
+          ubicaciones(name)
+        )
+      `)
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true);
+
+    if (error) {
+      console.error("Error al obtener variantes para ajuste:", error);
+      return [];
+    }
+
+    return (data || []).map((v: any) => {
+      const p = v.productos;
+      const totalStock = (v.existencias || []).reduce(
+        (acc: number, curr: any) => acc + (curr.quantity || 0),
+        0
+      );
+      return {
+        id: v.id,
+        variantId: v.id,
+        sku: v.sku || "S/SKU",
+        productName: p?.name || "Sin Nombre",
+        categoryName: p?.categorias?.name || "Sin Categoría",
+        colorName: v.colores?.name || null,
+        sizeName: v.tallas?.name || null,
+        sleeveTypeName: v.tipos_manga?.name || null,
+        locationId: "",
+        locationName: "Bodega Principal",
+        quantity: totalStock,
+        minStock: v.min_stock || 0,
+        salePrice: Number(v.sale_price || 0),
+        updatedAt: new Date().toISOString(),
+      };
+    });
+  },
+
+  /**
+   * Obtiene las existencias desglosadas por variante y ubicación.
+   * Si una variante no tiene fila en existencias, se incluye con cantidad 0.
    */
   async getStockByLocation(
     tenantId: string,
     locationId?: string
   ): Promise<StockItemView[]> {
-    let query = supabase
-      .from("existencias")
+    // 1. Obtener todas las variantes activas del tenant
+    const { data: variants, error: varError } = await supabase
+      .from("variantes_producto")
       .select(`
         id,
-        quantity,
-        updated_at,
-        location_id,
-        ubicaciones!inner(name),
-        variant_id,
-        variantes_producto!inner(
+        sku,
+        sale_price,
+        min_stock,
+        productos!inner(
+          name,
+          categorias(name)
+        ),
+        colores(name),
+        tallas(name),
+        tipos_manga(name),
+        existencias(
           id,
-          sku,
-          sale_price,
-          min_stock,
-          productos!inner(
-            name,
-            categorias(name)
-          ),
-          colores(name),
-          tallas(name),
-          tipos_manga(name)
+          quantity,
+          location_id,
+          updated_at,
+          ubicaciones(name)
         )
       `)
-      .eq("tenant_id", tenantId);
+      .eq("tenant_id", tenantId)
+      .eq("is_active", true);
 
-    if (locationId) {
-      query = query.eq("location_id", locationId);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error("Error al obtener existencias:", error);
+    if (varError) {
+      console.error("Error al obtener variantes para inventario:", varError);
       return [];
     }
 
-    return (data || []).map((row: any) => {
-      const v = row.variantes_producto;
-      const p = v?.productos;
-      return {
-        id: row.id,
-        variantId: row.variant_id,
-        sku: v?.sku || "S/SKU",
-        productName: p?.name || "Sin Nombre",
-        categoryName: p?.categorias?.name || "Sin Categoría",
-        colorName: v?.colores?.name || null,
-        sizeName: v?.tallas?.name || null,
-        sleeveTypeName: v?.tipos_manga?.name || null,
-        locationId: row.location_id,
-        locationName: row.ubicaciones?.name || "Principal",
-        quantity: row.quantity,
-        minStock: v?.min_stock || 0,
-        salePrice: Number(v?.sale_price || 0),
-        updatedAt: row.updated_at,
-      };
+    const result: StockItemView[] = [];
+
+    (variants || []).forEach((v: any) => {
+      const p = v.productos;
+      const existenciasList = v.existencias || [];
+
+      if (existenciasList.length === 0) {
+        // Variante sin existencias registradas todavía -> mostrar con cantidad 0
+        result.push({
+          id: `virtual-${v.id}`,
+          variantId: v.id,
+          sku: v.sku || "S/SKU",
+          productName: p?.name || "Sin Nombre",
+          categoryName: p?.categorias?.name || "Sin Categoría",
+          colorName: v.colores?.name || null,
+          sizeName: v.tallas?.name || null,
+          sleeveTypeName: v.tipos_manga?.name || null,
+          locationId: "",
+          locationName: "Bodega Principal",
+          quantity: 0,
+          minStock: v.min_stock || 5,
+          salePrice: Number(v.sale_price || 0),
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        existenciasList.forEach((ex: any) => {
+          if (locationId && ex.location_id !== locationId) return;
+
+          result.push({
+            id: ex.id,
+            variantId: v.id,
+            sku: v.sku || "S/SKU",
+            productName: p?.name || "Sin Nombre",
+            categoryName: p?.categorias?.name || "Sin Categoría",
+            colorName: v.colores?.name || null,
+            sizeName: v.tallas?.name || null,
+            sleeveTypeName: v.tipos_manga?.name || null,
+            locationId: ex.location_id,
+            locationName: ex.ubicaciones?.name || "Bodega Principal",
+            quantity: ex.quantity,
+            minStock: v.min_stock || 5,
+            salePrice: Number(v.sale_price || 0),
+            updatedAt: ex.updated_at,
+          });
+        });
+      }
     });
+
+    return result;
   },
 
   /**

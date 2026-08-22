@@ -47,6 +47,17 @@ export function InventoryAdjustmentModal({
     }
   }, [preselectedVariantId]);
 
+  useEffect(() => {
+    if (filteredItems.length > 0) {
+      const exists = filteredItems.some((it) => it.variantId === selectedVariantId);
+      if (!exists) {
+        setSelectedVariantId(filteredItems[0].variantId);
+      }
+    } else {
+      setSelectedVariantId("");
+    }
+  }, [searchFilter, stockItems]);
+
   const loadInitialData = async () => {
     if (!tenant?.id) return;
     setLoading(true);
@@ -54,7 +65,7 @@ export function InventoryAdjustmentModal({
     try {
       const [locs, items] = await Promise.all([
         inventoryService.getLocations(tenant.id),
-        inventoryService.getStockByLocation(tenant.id),
+        inventoryService.getAllVariantsForAdjustment(tenant.id),
       ]);
       setLocations(locs);
       setStockItems(items);

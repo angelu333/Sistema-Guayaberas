@@ -246,22 +246,22 @@ Inventario Guayabera/
 ---
 
 ### ETAPA 4 — Punto de Venta (POS)
-**Estado: Pendiente**
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Migración SQL: ventas, detalle_ventas, pagos_venta | Pendiente |
-| Edge Function complete-sale (transacción atómica) | Pendiente |
-| Configurar RLS para tablas de ventas | Pendiente |
-| Servicio sales.service.ts | Pendiente |
-| Store de carrito POS con Zustand | Pendiente |
-| Pantalla POS optimizada para tablet con buscador y catálogo | Pendiente |
-| Carrito con cantidades editables y campo de descuento | Pendiente |
-| Selector de método de pago (efectivo, tarjeta, transferencia) | Pendiente |
-| Selector de cliente (opcional / mayorista) | Pendiente |
-| Descuento automático e instantáneo de inventario al vender | Pendiente |
-| Generación de ticket de venta (HTML imprimible) | Pendiente |
-| Página de historial de ventas y detalle de venta | Pendiente |
+| Migración SQL: ventas, detalle_ventas, pagos_venta | Completado |
+| Función generate_ticket_number (numero autoincremental) | Completado |
+| Configurar RLS para tablas de ventas | Completado |
+| Servicio sales.service.ts | Completado |
+| Store de carrito POS con Zustand | Completado |
+| Pantalla POS optimizada para tablet con buscador y catálogo | Completado |
+| Carrito con cantidades editables y campo de descuento | Completado |
+| Selector de método de pago (efectivo, tarjeta, transferencia) | Completado |
+| Descuento global e instantáneo al vender | Completado |
+| Descuento automático de inventario al completar venta | Completado |
+| Ticket de venta con opción de imprimir | Completado |
+| Página de historial de ventas con KPIs y detalle expandible | Completado |
 
 ---
 

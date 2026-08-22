@@ -26,8 +26,13 @@ import {
 import type { StockAlert } from "@/types/domain.types";
 import { InventoryAdjustmentModal } from "@/components/inventario/InventoryAdjustmentModal";
 
+import { useAuthStore } from "@/stores/auth.store";
+
 export default function InventarioPage() {
   const { tenant } = useTenantStore();
+  const { session } = useAuthStore();
+  const effectiveTenantId = tenant?.id || session?.tenantId;
+
   const [activeTab, setActiveTab] = useState<"existencias" | "historial" | "alertas">("existencias");
 
   const [stockItems, setStockItems] = useState<StockItemView[]>([]);
@@ -40,13 +45,13 @@ export default function InventarioPage() {
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(undefined);
 
   const loadData = useCallback(async () => {
-    if (!tenant?.id) return;
+    if (!effectiveTenantId) return;
     setLoading(true);
     try {
       const [itemsData, movementsData, alertsData] = await Promise.all([
-        inventoryService.getStockByLocation(tenant.id),
-        inventoryService.getMovementHistory(tenant.id, 50),
-        inventoryService.getStockAlerts(tenant.id),
+        inventoryService.getStockByLocation(effectiveTenantId),
+        inventoryService.getMovementHistory(effectiveTenantId, 50),
+        inventoryService.getStockAlerts(effectiveTenantId),
       ]);
       setStockItems(itemsData);
       setMovements(movementsData);
@@ -56,7 +61,7 @@ export default function InventarioPage() {
     } finally {
       setLoading(false);
     }
-  }, [tenant?.id]);
+  }, [effectiveTenantId]);
 
   useEffect(() => {
     loadData();
