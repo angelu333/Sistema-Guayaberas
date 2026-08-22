@@ -23,7 +23,8 @@ import { useTenantStore } from "@/stores/tenant.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useCartStore } from "@/stores/cart.store";
 import { salesService } from "@/services/sales.service";
-import type { ProductVariant, PaymentMethod } from "@/types/domain.types";
+import { clientsService } from "@/services/clients.service";
+import type { ProductVariant, PaymentMethod, Client } from "@/types/domain.types";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -48,6 +49,7 @@ export default function POSPage() {
   const effectiveTenantId = tenant?.id || session?.tenantId;
 
   const [variants, setVariants] = useState<ProductVariant[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [loadingVariants, setLoadingVariants] = useState(true);
   const [checkoutStep, setCheckoutStep] = useState<CheckoutStep>("cart");
@@ -57,6 +59,12 @@ export default function POSPage() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastTicket, setLastTicket] = useState<TicketData | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const loadClients = useCallback(async () => {
+    if (!effectiveTenantId) return;
+    const clientList = await clientsService.getClients(effectiveTenantId);
+    setClients(clientList);
+  }, [effectiveTenantId]);
 
   const loadVariants = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -119,7 +127,8 @@ export default function POSPage() {
 
   useEffect(() => {
     loadVariants();
-  }, [loadVariants]);
+    loadClients();
+  }, [loadVariants, loadClients]);
 
   useEffect(() => {
     searchRef.current?.focus();
@@ -332,6 +341,44 @@ export default function POSPage() {
               Limpiar
             </button>
           )}
+        </div>
+
+        {/* Selector de Cliente */}
+        <div className="p-3 border-b border-[#DDD9D0] bg-white">
+          <label className="block text-[11px] font-semibold text-[#6B7A71] uppercase tracking-wider mb-1 flex items-center justify-between">
+            <span className="flex items-center gap-1">
+              <User className="w-3.5 h-3.5 text-[#556B5D]" /> Cliente Asignado
+            </span>
+            {cart.clientName && (
+              <span className="text-[10px] text-[#3F7D58] font-bold">✓ Vinculado</span>
+            )}
+          </label>
+          <select
+            value={cart.clientId || ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              if (!val) {
+                cart.setClient(null, null);
+                cart.setGlobalDiscount(0);
+              } else {
+                const found = clients.find((c) => c.id === val);
+                if (found) {
+                  cart.setClient(found.id, found.fullName);
+                  if (found.discountPercent > 0) {
+                    cart.setGlobalDiscount(found.discountPercent);
+                  }
+                }
+              }
+            }}
+            className="w-full px-2.5 py-1.5 text-xs border border-[#DDD9D0] rounded-lg bg-[#F8F6F1] text-[#26302B] focus:outline-none focus:border-[#556B5D]"
+          >
+            <option value="">Público General (Sin registrar)</option>
+            {clients.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.fullName} {c.company ? `(${c.company})` : ""} {c.discountPercent > 0 ? `— ${c.discountPercent}% Desc.` : ""}
+              </option>
+            ))}
+          </select>
         </div>
 
         {checkoutStep === "cart" && (

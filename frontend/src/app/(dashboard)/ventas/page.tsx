@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import {
   Search,
   ShoppingBag,
@@ -197,9 +197,8 @@ export default function VentasPage() {
                 </tr>
               ) : (
                 filtered.map((sale) => (
-                  <>
+                  <Fragment key={sale.id}>
                     <tr
-                      key={sale.id}
                       className="hover:bg-[#F8F6F1]/50 transition-colors cursor-pointer"
                       onClick={() =>
                         setExpandedId(expandedId === sale.id ? null : sale.id)
@@ -329,7 +328,7 @@ export default function VentasPage() {
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))
               )}
             </tbody>

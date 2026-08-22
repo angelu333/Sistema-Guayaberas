@@ -265,33 +265,32 @@ Inventario Guayabera/
 
 ---
 
-### ETAPA 5 — Clientes
-**Estado: Pendiente**
+### ETAPA 5 — Clientes y CRM
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Migración SQL: clientes | Pendiente |
-| Configurar RLS para clientes | Pendiente |
-| Servicio clients.service.ts | Pendiente |
-| Listado de clientes con búsqueda y filtros | Pendiente |
-| Formulario de registro y edición de cliente | Pendiente |
-| Vista de detalle con historial de compras acumuladas | Pendiente |
-| Integración de selección de cliente en el Punto de Venta | Pendiente |
+| Migración SQL: tabla clientes con RLS | Completado |
+| Servicio clients.service.ts | Completado |
+| Listado de clientes con búsqueda y filtros por tipo (Regular/Mayorista) | Completado |
+| Formulario de registro y edición de cliente (ClientModal.tsx) | Completado |
+| Vista de detalle con historial de compras acumuladas (ClientDetailModal.tsx) | Completado |
+| Integración de selección de cliente en el Punto de Venta (POS) con descuento automático | Completado |
 
 ---
 
 ### ETAPA 6 — Dashboard y KPIs
-**Estado: Pendiente**
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Queries optimizadas para métricas del dashboard | Pendiente |
-| Tarjetas KPI: ventas del día, inventario total, bajo stock, agotados | Pendiente |
-| Gráfica de ventas por día (semana actual) | Pendiente |
-| Gráfica de productos y colores más vendidos | Pendiente |
-| Tabla de últimas ventas registradas | Pendiente |
-| Panel de alertas activas de stock | Pendiente |
-| Adaptación de vista según rol del usuario | Pendiente |
+| Servicio dashboard.service.ts con métricas agregadas y valuación de inventario | Completado |
+| Tarjetas KPI: ventas del día, ventas de la semana, ingresos del mes, valuación total | Completado |
+| Gráfica interactiva de tendencia de ventas semanales (SalesWeeklyChart.tsx con Recharts) | Completado |
+| Gráfica interactiva de productos y guayaberas más vendidas (TopProductsChart.tsx con Recharts) | Completado |
+| Tabla de últimas ventas registradas en tiempo real | Completado |
+| Panel de alertas activas de reabastecimiento | Completado |
+| Adaptación de vista y bienvenida personalizada según el rol del usuario | Completado |
 
 ---
 

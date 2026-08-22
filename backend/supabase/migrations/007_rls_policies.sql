@@ -28,7 +28,7 @@ ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "tenant_select_own" ON public.tenants;
 CREATE POLICY "tenant_select_own" ON public.tenants
   FOR SELECT USING (
-    id = public.get_current_tenant_id() OR is_active = true
+    id = public.get_current_tenant_id() OR (auth.uid() IS NULL AND is_active = true)
   );
 
 DROP POLICY IF EXISTS "tenants_insert_public" ON public.tenants;
