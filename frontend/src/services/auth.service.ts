@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import { UserRole } from "@/types/domain.types";
 
 export interface RegisterCompanyDTO {
@@ -23,6 +23,7 @@ export interface AuthSessionData {
   email: string;
   role: UserRole;
   companyName: string;
+  tenantSlug: string;
 }
 
 /**
@@ -171,7 +172,7 @@ export const authService = {
 
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("tenant_id, full_name, role, is_active, tenants(name)")
+      .select("tenant_id, full_name, role, is_active, tenants(name, slug)")
       .eq("id", user.id)
       .single();
 
@@ -179,7 +180,7 @@ export const authService = {
       return null;
     }
 
-    const tenantObj = profile.tenants as unknown as { name: string } | null;
+    const tenantObj = profile.tenants as unknown as { name: string; slug: string } | null;
 
     return {
       userId: user.id,
@@ -188,6 +189,7 @@ export const authService = {
       email: user.email || "",
       role: profile.role as UserRole,
       companyName: tenantObj?.name || "Empresa",
+      tenantSlug: tenantObj?.slug || "",
     };
   },
 };

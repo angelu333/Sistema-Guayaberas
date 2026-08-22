@@ -17,57 +17,50 @@ export default function DashboardLayout({
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
   const setTenant = useTenantStore((state) => state.setTenant);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(!session);
 
   useEffect(() => {
+    let isMounted = true;
+
     async function verifyAuth() {
-      if (!session) {
-        try {
-          const currentSession = await authService.getCurrentSession();
-          if (currentSession) {
-            setSession(currentSession);
-            setTenant({
-              id: currentSession.tenantId,
-              name: currentSession.companyName,
-              slug: "",
-              rfc: null,
-              phone: null,
-              email: currentSession.email,
-              address: null,
-              logoUrl: null,
-              whatsapp: null,
-              isActive: true,
-              createdAt: "",
-            });
-          } else {
-            router.push("/login");
-          }
-        } catch {
+      try {
+        const currentSession = await authService.getCurrentSession();
+        if (!isMounted) return;
+
+        if (currentSession) {
+          setSession(currentSession);
+          setTenant({
+            id: currentSession.tenantId,
+            name: currentSession.companyName,
+            slug: currentSession.tenantSlug || "",
+            rfc: null,
+            phone: null,
+            email: currentSession.email,
+            address: null,
+            logoUrl: null,
+            whatsapp: null,
+            isActive: true,
+            createdAt: "",
+          });
+        } else {
           router.push("/login");
         }
-      } else {
-        // Asegurar que tenant store tenga el tenant activo
-        setTenant({
-          id: session.tenantId,
-          name: session.companyName,
-          slug: "",
-          rfc: null,
-          phone: null,
-          email: session.email,
-          address: null,
-          logoUrl: null,
-          whatsapp: null,
-          isActive: true,
-          createdAt: "",
-        });
+      } catch (err) {
+        console.error("Error al verificar autenticación:", err);
+        if (isMounted) router.push("/login");
+      } finally {
+        if (isMounted) setCheckingAuth(false);
       }
-      setCheckingAuth(false);
     }
 
     verifyAuth();
-  }, [session, setSession, setTenant, router]);
 
-  if (checkingAuth) {
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Se ejecuta una sola vez al montar el layout principal
+
+  if (checkingAuth && !session) {
     return (
       <div className="min-h-screen bg-[#F8F6F1] flex flex-col items-center justify-center gap-3">
         <div className="w-10 h-10 border-3 border-[#556B5D] border-t-transparent rounded-full animate-spin" />
