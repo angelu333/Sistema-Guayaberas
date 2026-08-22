@@ -295,28 +295,29 @@ Inventario Guayabera/
 ---
 
 ### ETAPA 7 — Auditoría e historial
-**Estado: Pendiente**
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Migración SQL: tabla auditoria | Pendiente |
-| Triggers de base de datos para acciones auditables | Pendiente |
-| Registro automático: cambios de precios, ajustes, usuarios | Pendiente |
-| Página de historial de auditoría con filtros por usuario y fecha | Pendiente |
+| Migración SQL: tabla auditoria con RLS (006_audit.sql) | Completado |
+| Servicio audit.service.ts | Completado |
+| Registro automático de eventos sensibles (precios, stock, usuarios, ventas canceladas) | Completado |
+| Página de historial de auditoría con filtros por entidad y acción (/auditoria) | Completado |
+| Modal de inspección de comparativa JSON antes vs después (AuditDetailModal.tsx) | Completado |
 
 ---
 
-### ETAPA 8 — Catálogo público
-**Estado: Pendiente**
+### ETAPA 8 — Catálogo público compartible
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Ruta pública /catalogo/[tenant-slug] | Pendiente |
-| Query pública (sin autenticación) con RLS | Pendiente |
-| Catálogo visual con filtros por modelo, talla y color | Pendiente |
-| Vista de producto con fotografías y disponibilidad | Pendiente |
-| Botón de contacto directo por WhatsApp | Pendiente |
-| Funcionalidad de compartir enlace de productos | Pendiente |
+| Servicio public-catalog.service.ts con acceso libre por slug | Completado |
+| Pantalla pública del catálogo libre de autenticación (/catalogo/[slug]) | Completado |
+| Barra de 3 filtros principales de búsqueda (Modelo, Talla y Color) | Completado |
+| Sincronización en tiempo real de URL y Deep-Linking compartible por WhatsApp | Completado |
+| Generador de mensajes y pedidos automáticos para WhatsApp | Completado |
+| Panel interno para vendedores (CatalogoLinkPage.tsx) para copiar enlaces filtrados | Completado |
 
 ---
 

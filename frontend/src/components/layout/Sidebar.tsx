@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -13,9 +13,11 @@ import {
   BarChart3,
   Settings,
   ShieldCheck,
+  Share2,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth.store";
+import { useTenantStore } from "@/stores/tenant.store";
 
 interface NavItem {
   label: string;
@@ -56,6 +58,16 @@ const navItems: NavItem[] = [
     icon: <Users className="w-4 h-4" />,
   },
   {
+    label: "Catálogo Público",
+    href: "/catalogo",
+    icon: <Share2 className="w-4 h-4" />,
+  },
+  {
+    label: "Links WhatsApp",
+    href: "/catalogo-link",
+    icon: <Share2 className="w-4 h-4" />,
+  },
+  {
     label: "Producción",
     href: "/produccion",
     icon: <Factory className="w-4 h-4" />,
@@ -83,8 +95,14 @@ const navItems: NavItem[] = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const session = useAuthStore((state) => state.session);
+  const { session } = useAuthStore();
+  const { tenant } = useTenantStore();
   const userRole = session?.role || "seller";
+
+  const tenantSlug =
+    tenant?.slug ||
+    session?.companyName?.toLowerCase().replace(/\s+/g, "-") ||
+    "guayabera-test";
 
   const filteredNavItems = navItems.filter(
     (item) => !item.roles || item.roles.includes(userRole)
@@ -111,13 +129,14 @@ export function Sidebar() {
         {/* Navegacion Principal */}
         <nav className="p-3 space-y-1">
           {filteredNavItems.map((item) => {
+            const targetHref = item.href === "/catalogo" ? `/catalogo/${tenantSlug}` : item.href;
             const isActive =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
+              pathname === targetHref || pathname.startsWith(`${targetHref}/`);
 
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={targetHref}
                 className={[
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
                   isActive
