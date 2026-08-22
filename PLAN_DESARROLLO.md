@@ -321,28 +321,33 @@ Inventario Guayabera/
 
 ---
 
-### ETAPA 9 — Reportes básicos
-**Estado: Pendiente**
+### ETAPA 9 — Reportes e Informes Financieros
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
-| Reporte de ventas por periodo (día, semana, mes) | Pendiente |
-| Reporte de productos más y menos vendidos | Pendiente |
-| Reporte de existencias de inventario valorizado | Pendiente |
-| Reporte de productos agotados y bajo stock | Pendiente |
-| Reporte de ventas por vendedor | Pendiente |
-| Exportación de reportes a CSV | Pendiente |
+| Servicio reports.service.ts con consultas agregadas | Completado |
+| Reporte de ventas por periodo (día, semana, mes, personalizado) | Completado |
+| Reporte de existencias de inventario valorizado y ganancia estimada ($33,640.00 MXN) | Completado |
+| Reporte de rendimiento y ventas por vendedor | Completado |
+| Exportación de reportes a CSV/Excel con codificación UTF-8 BOM | Completado |
+| Pantalla principal de reportes (/reportes) con pestañas e indicadores | Completado |
 
 ---
 
-## 7. Fases futuras de expansión
-
 ### FASE 2 — Producción, Compras y Mayoreo
-- Órdenes de producción y lotes
-- Flujo de estados (Pendiente → Corte → Costura → Bordado → Terminado)
-- Ingreso de producción terminada a inventario
-- Proveedores y registro de compras
-- Clientes mayoristas con precios y descuentos especiales
+**Estado: En Desarrollo (Módulo de Producción Completado)**
+
+| Tarea | Estado |
+|---|---|
+| Migración SQL: tablas etapas_produccion y ordenes_produccion con RLS (008_production.sql) | Completado |
+| Servicio production.service.ts con sembrado de etapas predeterminadas de guayaberas | Completado |
+| Secuencia predeterminada: Corte -> Alforza-Planchado -> Bordado -> Armado -> Acabado -> Terminado | Completado |
+| Administrador de Etapas por Empresa (ProductionStageConfigModal.tsx): agregar, reordenar y eliminar | Completado |
+| Tablero Kanban de producción por etapas con lanzamiento de lotes (/produccion) | Completado |
+| Confirmación de lote terminado e ingreso automático de piezas al stock de inventario | Completado |
+| Proveedores y registro de compras | Pendiente |
+| Clientes mayoristas con precios y descuentos especiales | Completado (Etapa 5) |
 
 ### FASE 3 — Materias primas y análisis avanzado
 - Control de insumos (telas, botones, hilo, etiquetas)
