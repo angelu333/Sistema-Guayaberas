@@ -1,74 +1,96 @@
-﻿-- ============================================================
+-- ============================================================
 -- Migracion 007: Row Level Security (RLS) - Aislamiento multi-tenant
 -- CRITICO: Estas politicas garantizan que cada empresa
 -- solo acceda a sus propios datos.
 -- ============================================================
 
 -- Funcion de ayuda: obtiene el tenant_id del usuario autenticado
--- Se usa en todas las politicas RLS para comparar registros
-CREATE OR REPLACE FUNCTION get_current_tenant_id()
+CREATE OR REPLACE FUNCTION public.get_current_tenant_id()
 RETURNS UUID AS $$
-  SELECT tenant_id FROM user_profiles WHERE id = auth.uid()
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+BEGIN
+  RETURN (SELECT tenant_id FROM public.user_profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- Funcion de ayuda: obtiene el rol del usuario autenticado
-CREATE OR REPLACE FUNCTION get_current_user_role()
+CREATE OR REPLACE FUNCTION public.get_current_user_role()
 RETURNS TEXT AS $$
-  SELECT role FROM user_profiles WHERE id = auth.uid()
-$$ LANGUAGE sql SECURITY DEFINER STABLE;
+BEGIN
+  RETURN (SELECT role FROM public.user_profiles WHERE id = auth.uid());
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
 
 -- ============================================================
 -- RLS para: tenants
--- Solo el admin de un tenant puede ver y editar su propio tenant
 -- ============================================================
-ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "tenant_select_own" ON tenants
+DROP POLICY IF EXISTS "tenant_select_own" ON public.tenants;
+CREATE POLICY "tenant_select_own" ON public.tenants
   FOR SELECT USING (
-    id = get_current_tenant_id()
+    id = public.get_current_tenant_id() OR is_active = true
   );
 
-CREATE POLICY "tenant_update_own_admin" ON tenants
+DROP POLICY IF EXISTS "tenants_insert_public" ON public.tenants;
+CREATE POLICY "tenants_insert_public" ON public.tenants
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "tenant_update_own_admin" ON public.tenants;
+CREATE POLICY "tenant_update_own_admin" ON public.tenants
   FOR UPDATE USING (
-    id = get_current_tenant_id()
-    AND get_current_user_role() = 'admin'
+    id = public.get_current_tenant_id()
+    AND public.get_current_user_role() = 'admin'
   );
+
+-- ============================================================
+-- RLS para: tenant_plans
+-- ============================================================
+ALTER TABLE public.tenant_plans ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "tenant_plans_select_own" ON public.tenant_plans;
+CREATE POLICY "tenant_plans_select_own" ON public.tenant_plans
+  FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+
+DROP POLICY IF EXISTS "tenant_plans_insert_public" ON public.tenant_plans;
+CREATE POLICY "tenant_plans_insert_public" ON public.tenant_plans
+  FOR INSERT WITH CHECK (true);
 
 -- ============================================================
 -- RLS para: tenant_settings
 -- ============================================================
-ALTER TABLE tenant_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tenant_settings ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "tenant_settings_select_own" ON tenant_settings
-  FOR SELECT USING (tenant_id = get_current_tenant_id());
+DROP POLICY IF EXISTS "tenant_settings_select_own" ON public.tenant_settings;
+CREATE POLICY "tenant_settings_select_own" ON public.tenant_settings
+  FOR SELECT USING (tenant_id = public.get_current_tenant_id());
 
-CREATE POLICY "tenant_settings_update_admin" ON tenant_settings
+DROP POLICY IF EXISTS "tenant_settings_insert_public" ON public.tenant_settings;
+CREATE POLICY "tenant_settings_insert_public" ON public.tenant_settings
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "tenant_settings_update_admin" ON public.tenant_settings;
+CREATE POLICY "tenant_settings_update_admin" ON public.tenant_settings
   FOR ALL USING (
-    tenant_id = get_current_tenant_id()
-    AND get_current_user_role() = 'admin'
+    tenant_id = public.get_current_tenant_id()
+    AND public.get_current_user_role() = 'admin'
   );
 
 -- ============================================================
 -- RLS para: user_profiles
--- Un usuario puede ver perfiles de su mismo tenant
--- Solo el admin puede crear/editar/desactivar usuarios
 -- ============================================================
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "user_profiles_select_same_tenant" ON user_profiles
-  FOR SELECT USING (tenant_id = get_current_tenant_id());
+DROP POLICY IF EXISTS "user_profiles_select_same_tenant" ON public.user_profiles;
+CREATE POLICY "user_profiles_select_same_tenant" ON public.user_profiles
+  FOR SELECT USING (tenant_id = public.get_current_tenant_id() OR id = auth.uid());
 
-CREATE POLICY "user_profiles_manage_admin" ON user_profiles
+DROP POLICY IF EXISTS "user_profiles_insert_own" ON public.user_profiles;
+CREATE POLICY "user_profiles_insert_own" ON public.user_profiles
+  FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "user_profiles_manage_admin" ON public.user_profiles;
+CREATE POLICY "user_profiles_manage_admin" ON public.user_profiles
   FOR ALL USING (
-    tenant_id = get_current_tenant_id()
-    AND get_current_user_role() = 'admin'
+    tenant_id = public.get_current_tenant_id()
+    AND public.get_current_user_role() = 'admin'
   );
-
--- Nota: Las politicas para las tablas de productos, inventario,
--- ventas, clientes y auditoria se agregan en sus migraciones
--- correspondientes (003 al 008), siguiendo el mismo patron:
---
---   tenant_id = get_current_tenant_id()
---
--- Esto garantiza aislamiento total entre empresas a nivel
--- del motor de base de datos PostgreSQL.
