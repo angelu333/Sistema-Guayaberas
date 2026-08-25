@@ -336,7 +336,7 @@ Inventario Guayabera/
 ---
 
 ### FASE 2 — Producción, Compras y Mayoreo
-**Estado: En Desarrollo (Módulo de Producción Completado)**
+**Estado: Completado**
 
 | Tarea | Estado |
 |---|---|
@@ -346,14 +346,24 @@ Inventario Guayabera/
 | Administrador de Etapas por Empresa (ProductionStageConfigModal.tsx): agregar, reordenar y eliminar | Completado |
 | Tablero Kanban de producción por etapas con lanzamiento de lotes (/produccion) | Completado |
 | Confirmación de lote terminado e ingreso automático de piezas al stock de inventario | Completado |
-| Proveedores y registro de compras | Pendiente |
+| Migración SQL: tablas proveedores, compras y detalle_compras (009_suppliers.sql) | Completado |
+| Directorio de Proveedores y Registro de Órdenes de Compra (/compras) | Completado |
+| Recepción de órdenes de compra con ingreso automático a inventario (movimiento ENTRADA) | Completado |
 | Clientes mayoristas con precios y descuentos especiales | Completado (Etapa 5) |
 
-### FASE 3 — Materias primas y análisis avanzado
-- Control de insumos (telas, botones, hilo, etiquetas)
-- Recetas de producción (BOM) con descuento automático de materiales
-- KPIs avanzados: rotación de inventario, utilidad estimada, tiempo promedio de producción
-- Transferencias entre ubicaciones (tienda, bodega)
+---
+
+### FASE 3 — Materias primas, insumos y recetas de confección (BOM)
+**Estado: Completado (Módulo de Insumos y Recetas BOM)**
+
+| Tarea | Estado |
+|---|---|
+| Migración SQL: tablas insumos y recetas_produccion (010_inputs.sql) | Completado |
+| Servicio inputs.service.ts con gestión de materias primas (telas, botones, hilos, etiquetas) | Completado |
+| Pantalla principal de Materias Primas e Insumos (/insumos) con alertas de stock bajo | Completado |
+| Creador de Recetas de Confección BOM por modelo de guayabera (RecipeBOMModal.tsx) | Completado |
+| Descuento automático de insumos al finalizar órdenes de producción | Completado |
+| Transferencias de stock entre ubicaciones (tienda, bodega) | Pendiente |
 
 ### FASE 4 — Integraciones y automatización
 - Integración avanzada con WhatsApp

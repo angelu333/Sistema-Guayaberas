@@ -312,7 +312,7 @@ export const productionService = {
         return { success: false, error: orderErr.message };
       }
 
-      // 2. Ingresar existencias a inventario si hay ubicacion elegida
+      // 2. Registrar el movimiento oficial de ENTRADA por producción
       let targetLocId = order.targetLocationId;
       if (!targetLocId) {
         const { data: locs } = await supabase
@@ -327,40 +327,57 @@ export const productionService = {
       }
 
       if (targetLocId && finalQty > 0) {
-        // Upsert existencia
-        const { data: exist } = await supabase
-          .from("existencias")
-          .select("id, quantity")
-          .eq("tenant_id", order.tenantId)
-          .eq("variant_id", order.variantId)
-          .eq("location_id", targetLocId)
-          .maybeSingle();
-
-        if (exist) {
-          await supabase
-            .from("existencias")
-            .update({
-              quantity: (exist.quantity || 0) + finalQty,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", exist.id);
-        } else {
-          await supabase.from("existencias").insert({
-            tenant_id: order.tenantId,
-            variant_id: order.variantId,
-            location_id: targetLocId,
-            quantity: finalQty,
-          });
-        }
-
-        // Registrar movimiento de inventario PRODUCCION
-        await supabase.from("movimientos_inventario").insert({
+        // Insertar movimiento ENTRADA (el trigger de postgres update_stock_on_movement actualiza existencias automaticamente)
+        const { error: movErr } = await supabase.from("movimientos_inventario").insert({
           tenant_id: order.tenantId,
           variant_id: order.variantId,
           location_id: targetLocId,
-          type: "PRODUCCION",
+          type: "ENTRADA",
           quantity: finalQty,
-          reason: `Producción finalizada ${order.orderNumber}`,
+          reason: `Entrada por producción terminada ${order.orderNumber}`,
+        });
+
+        if (movErr) {
+          console.error("Error al registrar movimiento de entrada por producción:", movErr);
+          // Fallback manual en existencias si el trigger no estuviera activo
+          const { data: exist } = await supabase
+            .from("existencias")
+            .select("id, quantity")
+            .eq("tenant_id", order.tenantId)
+            .eq("variant_id", order.variantId)
+            .eq("location_id", targetLocId)
+            .maybeSingle();
+
+          if (exist) {
+            await supabase
+              .from("existencias")
+              .update({
+                quantity: (exist.quantity || 0) + finalQty,
+                updated_at: new Date().toISOString(),
+              })
+              .eq("id", exist.id);
+          } else {
+            await supabase.from("existencias").insert({
+              tenant_id: order.tenantId,
+              variant_id: order.variantId,
+              location_id: targetLocId,
+              quantity: finalQty,
+            });
+          }
+        }
+
+        // 3. Registrar evento en la bitacora de auditoria
+        await supabase.from("auditoria").insert({
+          tenant_id: order.tenantId,
+          entity: "INVENTARIO",
+          action: "CREAR",
+          details: `Entrada de inventario por producción terminada (+${finalQty} pzas de ${order.productName} SKU: ${order.sku})`,
+          new_data: {
+            orderNumber: order.orderNumber,
+            quantity: finalQty,
+            variantId: order.variantId,
+            locationId: targetLocId,
+          },
         });
       }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Menu } from "lucide-react";
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { authService } from "@/services/auth.service";
@@ -18,6 +19,7 @@ export default function DashboardLayout({
   const setSession = useAuthStore((state) => state.setSession);
   const setTenant = useTenantStore((state) => state.setTenant);
   const [checkingAuth, setCheckingAuth] = useState(!session);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -58,7 +60,7 @@ export default function DashboardLayout({
     return () => {
       isMounted = false;
     };
-  }, []); // Se ejecuta una sola vez al montar el layout principal
+  }, []);
 
   if (checkingAuth && !session) {
     return (
@@ -72,13 +74,41 @@ export default function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F6F1] flex">
-      {/* Sidebar fijo a la izquierda */}
-      <Sidebar />
+    <div className="min-h-screen bg-[#F8F6F1] flex flex-col lg:flex-row">
+      {/* 1. Sidebar (Desktop fijo / Mobile off-canvas drawer) */}
+      <Sidebar
+        isMobileOpen={isMobileMenuOpen}
+        onCloseMobile={() => setIsMobileMenuOpen(false)}
+      />
 
-      {/* Area de contenido principal */}
+      {/* 2. Contenedor de contenido y Barra Móvil Superior */}
       <div className="flex-1 flex flex-col min-w-0">
-        <main className="flex-1">{children}</main>
+        {/* Barra superior solo en celulares y tablets */}
+        <header className="lg:hidden bg-[#26302B] text-white px-4 py-3 flex items-center justify-between border-b border-[#38463F] sticky top-0 z-30 shadow-sm">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-1.5 rounded-lg text-[#E7E3DA] hover:bg-[#323F38] transition-colors flex items-center justify-center"
+            title="Abrir menú"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-[#556B5D] flex items-center justify-center text-white font-bold text-xs font-[Outfit]">
+              G
+            </div>
+            <span className="font-[Outfit] font-bold text-sm text-white tracking-tight truncate max-w-[180px]">
+              {session?.companyName || "Guayabera Manager"}
+            </span>
+          </div>
+
+          <div className="w-7 h-7 rounded-full bg-[#8FA393] text-[#26302B] font-bold text-xs flex items-center justify-center font-[Outfit]">
+            {session?.fullName ? session.fullName.slice(0, 2).toUpperCase() : "US"}
+          </div>
+        </header>
+
+        {/* Contenido principal de la página */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
     </div>
   );

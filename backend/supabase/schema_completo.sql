@@ -704,11 +704,130 @@ CREATE INDEX IF NOT EXISTS idx_ordenes_stage  ON public.ordenes_produccion(curre
 
 ALTER TABLE public.ordenes_produccion ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "ordenes_select_own" ON public.ordenes_produccion
+-- ============================================================
+-- Migracion 009: Modulo de Proveedores y Compras
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.proveedores (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    contact_name  TEXT,
+    phone         TEXT,
+    email         TEXT,
+    type          TEXT NOT NULL DEFAULT 'telas' CHECK (type IN ('taller', 'telas', 'insumos', 'bordado', 'otro')),
+    city          TEXT,
+    notes         TEXT,
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_proveedores_tenant ON public.proveedores(tenant_id);
+
+ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "proveedores_select_own" ON public.proveedores
     FOR SELECT USING (tenant_id = public.get_current_tenant_id());
 
-CREATE POLICY "ordenes_all_own" ON public.ordenes_produccion
+CREATE POLICY "proveedores_all_own" ON public.proveedores
     FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
+CREATE TABLE IF NOT EXISTS public.compras (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    order_number  TEXT NOT NULL,
+    supplier_id   UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'received', 'cancelled')),
+    total_cost    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    notes         TEXT,
+    created_by    UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    received_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_compras_tenant ON public.compras(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_compras_supplier ON public.compras(supplier_id);
+
+ALTER TABLE public.compras ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "compras_select_own" ON public.compras
+    FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+
+CREATE POLICY "compras_all_own" ON public.compras
+    FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
+CREATE TABLE IF NOT EXISTS public.detalle_compras (
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    purchase_id   UUID NOT NULL REFERENCES public.compras(id) ON DELETE CASCADE,
+    variant_id    UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
+    quantity      INTEGER NOT NULL CHECK (quantity > 0),
+    unit_cost     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    location_id   UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_detalle_compras_purchase ON public.detalle_compras(purchase_id);
+CREATE INDEX IF NOT EXISTS idx_detalle_compras_tenant   ON public.detalle_compras(tenant_id);
+
+ALTER TABLE public.detalle_compras ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "detalle_compras_select_own" ON public.detalle_compras
+    FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+
+CREATE POLICY "detalle_compras_all_own" ON public.detalle_compras
+    FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
+-- ============================================================
+-- Migracion 010: Modulo de Insumos, Materias Primas y Recetas (BOM)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS public.insumos (
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name           TEXT NOT NULL,
+    category       TEXT NOT NULL DEFAULT 'tela' CHECK (category IN ('tela', 'boton', 'hilo', 'etiqueta', 'otro')),
+    unit           TEXT NOT NULL DEFAULT 'metros' CHECK (unit IN ('metros', 'piezas', 'rollos', 'gramos')),
+    current_stock  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (current_stock >= 0),
+    min_stock      NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (min_stock >= 0),
+    cost_per_unit  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (cost_per_unit >= 0),
+    supplier_id    UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
+    is_active      BOOLEAN NOT NULL DEFAULT true,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_insumos_tenant ON public.insumos(tenant_id);
+
+ALTER TABLE public.insumos ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "insumos_select_own" ON public.insumos
+    FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+
+CREATE POLICY "insumos_all_own" ON public.insumos
+    FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
+CREATE TABLE IF NOT EXISTS public.recetas_produccion (
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    product_id      UUID NOT NULL REFERENCES public.productos(id) ON DELETE CASCADE,
+    insumo_id       UUID NOT NULL REFERENCES public.insumos(id) ON DELETE CASCADE,
+    quantity_needed NUMERIC(10,2) NOT NULL CHECK (quantity_needed > 0),
+    notes           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_product_insumo UNIQUE (product_id, insumo_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_recetas_product ON public.recetas_produccion(product_id);
+CREATE INDEX IF NOT EXISTS idx_recetas_tenant  ON public.recetas_produccion(tenant_id);
+
+ALTER TABLE public.recetas_produccion ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "recetas_select_own" ON public.recetas_produccion
+    FOR SELECT USING (tenant_id = public.get_current_tenant_id());
+
+CREATE POLICY "recetas_all_own" ON public.recetas_produccion
+    FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
 
 
 

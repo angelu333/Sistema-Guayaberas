@@ -16,6 +16,7 @@ export interface StockItemView {
   locationName: string;
   quantity: number;
   minStock: number;
+  costPrice?: number;
   salePrice: number;
   updatedAt: string;
 }
@@ -174,6 +175,7 @@ export const inventoryService = {
       .select(`
         id,
         sku,
+        cost_price,
         sale_price,
         min_stock,
         productos!inner(
@@ -220,6 +222,7 @@ export const inventoryService = {
           locationName: "Bodega Principal",
           quantity: 0,
           minStock: v.min_stock || 5,
+          costPrice: Number(v.cost_price || 0),
           salePrice: Number(v.sale_price || 0),
           updatedAt: new Date().toISOString(),
         });
@@ -240,6 +243,7 @@ export const inventoryService = {
             locationName: ex.ubicaciones?.name || "Bodega Principal",
             quantity: ex.quantity,
             minStock: v.min_stock || 5,
+            costPrice: Number(v.cost_price || 0),
             salePrice: Number(v.sale_price || 0),
             updatedAt: ex.updated_at,
           });
