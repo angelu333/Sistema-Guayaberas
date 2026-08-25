@@ -252,7 +252,7 @@ export const quotesService = {
       return null;
     }
 
-    const t = r.tenants;
+    const t = Array.isArray(r.tenants) ? r.tenants[0] : r.tenants;
 
     return {
       id: r.id,
@@ -270,12 +270,12 @@ export const quotesService = {
       notes: r.notes || null,
       createdAt: r.created_at,
       tenantInfo: {
-        name: t?.name || "Guayabera Manager",
-        phone: t?.phone || null,
-        email: t?.email || null,
-        address: t?.address || null,
-        rfc: t?.rfc || null,
-        logoUrl: t?.logo_url || null,
+        name: (t as any)?.name || "Guayabera Manager",
+        phone: (t as any)?.phone || null,
+        email: (t as any)?.email || null,
+        address: (t as any)?.address || null,
+        rfc: (t as any)?.rfc || null,
+        logoUrl: (t as any)?.logo_url || null,
       },
       details: (r.detalle_cotizaciones || []).map((d: any) => {
         const v = d.variantes_producto;
