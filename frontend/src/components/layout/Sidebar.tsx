@@ -16,6 +16,7 @@ import {
   Share2,
   ShoppingBag,
   Layers,
+  FileText,
   X,
 } from "lucide-react";
 
@@ -82,6 +83,12 @@ const navItems: NavItem[] = [
     href: "/insumos",
     icon: <Layers className="w-4 h-4" />,
     roles: ["admin", "production"],
+  },
+  {
+    label: "Cotizaciones",
+    href: "/cotizaciones",
+    icon: <FileText className="w-4 h-4" />,
+    roles: ["admin", "seller"],
   },
   {
     label: "Reportes",

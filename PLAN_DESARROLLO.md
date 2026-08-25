@@ -349,6 +349,10 @@ Inventario Guayabera/
 | Migración SQL: tablas proveedores, compras y detalle_compras (009_suppliers.sql) | Completado |
 | Directorio de Proveedores y Registro de Órdenes de Compra (/compras) | Completado |
 | Recepción de órdenes de compra con ingreso automático a inventario (movimiento ENTRADA) | Completado |
+| Migración SQL: tablas rangos_mayoreo, cotizaciones y detalle_compras (011_quotes.sql) | Completado |
+| Módulo de Cotizaciones de Mayoreo y Presupuestos (/cotizaciones) con Folio COT | Completado |
+| Creador e Impresor de Ticket/PDF Profesional con Logo de la Empresa (QuotePreviewModal.tsx) | Completado |
+| Enlace Interactivo Compartible por WhatsApp (/cotizacion/[id]) con ajuste dinámico de piezas | Completado |
 | Clientes mayoristas con precios y descuentos especiales | Completado (Etapa 5) |
 
 ---
