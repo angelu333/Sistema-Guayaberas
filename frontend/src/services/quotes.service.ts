@@ -110,6 +110,34 @@ export const quotesService = {
   },
 
   /**
+   * Guarda y reemplaza la lista de escalas de mayoreo del tenant
+   */
+  async saveWholesaleTiers(
+    tenantId: string,
+    tiers: { name: string; minQuantity: number; maxQuantity: number | null; discountPercent: number }[]
+  ): Promise<{ success: boolean; error?: string }> {
+    await supabase.from("rangos_mayoreo").delete().eq("tenant_id", tenantId);
+
+    if (tiers.length === 0) return { success: true };
+
+    const rows = tiers.map((t) => ({
+      tenant_id: tenantId,
+      name: t.name.trim(),
+      min_quantity: t.minQuantity,
+      max_quantity: t.maxQuantity || null,
+      discount_percent: t.discountPercent,
+    }));
+
+    const { error } = await supabase.from("rangos_mayoreo").insert(rows);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  },
+
+  /**
    * Calcula el porcentaje de descuento por volumen aplicando la escala
    */
   calculateTierDiscount(totalPieces: number, tiers: WholesaleTier[]): number {

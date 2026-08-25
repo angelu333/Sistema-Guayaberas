@@ -363,7 +363,9 @@ export default function CotizacionesPage() {
       <WholesaleTierModal
         isOpen={isTierModalOpen}
         onClose={() => setIsTierModalOpen(false)}
+        tenantId={effectiveTenantId || ""}
         tiers={tiers}
+        onTiersUpdated={loadData}
       />
     </div>
   );
