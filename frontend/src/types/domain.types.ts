@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Tipos del dominio de negocio — Guayabera Manager
 // Estos tipos representan las entidades del sistema.
 // NO dependen de la base de datos directamente.
@@ -84,6 +84,8 @@ export interface Product {
   description: string | null;
   categoryId: string | null;
   category: Category | null;
+  imageUrl?: string | null;
+  images?: ProductImage[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -113,7 +115,8 @@ export interface ProductVariant {
 
 export interface ProductImage {
   id: string;
-  variantId: string;
+  variantId?: string;
+  productId?: string;
   url: string;
   sortOrder: number;
   isPrimary: boolean;

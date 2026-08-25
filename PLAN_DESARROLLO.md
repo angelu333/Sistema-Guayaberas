@@ -353,6 +353,13 @@ Inventario Guayabera/
 | Módulo de Cotizaciones de Mayoreo y Presupuestos (/cotizaciones) con Folio COT | Completado |
 | Creador e Impresor de Ticket/PDF Profesional con Logo de la Empresa (QuotePreviewModal.tsx) | Completado |
 | Enlace Interactivo Compartible por WhatsApp (/cotizacion/[id]) con ajuste dinámico de piezas | Completado |
+| Migración SQL: galeria de fotos de productos e imagenes_producto (012_product_images.sql) | Completado |
+| Cargador y previsualizador múltiple de fotografías con selector de Portada (ImageGalleryUploader.tsx) | Completado |
+| Rediseño del Catálogo Público con fotos grandes y modal con Carrusel interactivo (ProductDetailModal.tsx) | Completado |
+| Cuadrícula de cobro del Punto de Venta (POS) con miniaturas de fotos de guayaberas | Completado |
+| POS limpio agrupado por modelo y modal rápido de tallas reactivas (POSVariantSelectModal.tsx) | Completado |
+| Módulo de Configuración (/configuracion): Logo de marca, datos comerciales, perfil y contraseña | Completado |
+| Propagación global del logotipo oficial a Dashboard, Catálogo, Cotizaciones y Tickets | Completado |
 | Clientes mayoristas con precios y descuentos especiales | Completado (Etapa 5) |
 
 ---

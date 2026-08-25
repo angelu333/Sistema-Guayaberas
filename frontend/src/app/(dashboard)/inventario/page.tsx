@@ -13,6 +13,7 @@ import {
   Building2,
   ArrowUpRight,
   ArrowDownLeft,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -23,6 +24,7 @@ import {
   type StockItemView,
   type InventoryMovementRecord,
 } from "@/services/inventory.service";
+import { productsService } from "@/services/products.service";
 import type { StockAlert } from "@/types/domain.types";
 import { InventoryAdjustmentModal } from "@/components/inventario/InventoryAdjustmentModal";
 
@@ -63,9 +65,22 @@ export default function InventarioPage() {
     }
   }, [effectiveTenantId]);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  const handleDeleteItem = async (item: StockItemView) => {
+    if (
+      !confirm(
+        `¿Deseas ELIMINAR la variante "${item.productName}" (SKU: ${item.sku}) del inventario de forma permanente?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await productsService.deleteVariant(item.variantId);
+      await loadData();
+    } catch (err: any) {
+      alert(err.message || "Error al eliminar la variante del inventario.");
+    }
+  };
 
   // Cálculos para KPIs
   const totalUnits = stockItems.reduce((acc, curr) => acc + curr.quantity, 0);
@@ -319,15 +334,25 @@ export default function InventarioPage() {
                           )}
                         </td>
                         <td className="py-3 px-4 text-right">
-                          <button
-                            onClick={() => {
-                              setSelectedVariantId(item.variantId);
-                              setIsModalOpen(true);
-                            }}
-                            className="text-xs font-semibold text-[#556B5D] hover:underline"
-                          >
-                            + Ajustar Stock
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedVariantId(item.variantId);
+                                setIsModalOpen(true);
+                              }}
+                              className="text-xs font-semibold text-[#556B5D] hover:underline"
+                            >
+                              + Ajustar Stock
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteItem(item)}
+                              className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg transition-colors"
+                              title="Eliminar producto/modelo del inventario"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -16,6 +16,8 @@ import {
   Percent,
   Package,
   Printer,
+  Shirt,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -26,6 +28,7 @@ import { salesService } from "@/services/sales.service";
 import { clientsService } from "@/services/clients.service";
 import type { ProductVariant, PaymentMethod, Client } from "@/types/domain.types";
 import { createClient } from "@/lib/supabase/client";
+import { POSVariantSelectModal, type GroupedPOSProduct } from "@/components/pos/POSVariantSelectModal";
 
 const supabase = createClient();
 
@@ -58,13 +61,11 @@ export default function POSPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastTicket, setLastTicket] = useState<TicketData | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
-  const loadClients = useCallback(async () => {
-    if (!effectiveTenantId) return;
-    const clientList = await clientsService.getClients(effectiveTenantId);
-    setClients(clientList);
-  }, [effectiveTenantId]);
+  // Modal de Selección Rápida de Variantes (Color, Talla, Cantidad)
+  const [selectedProductForModal, setSelectedProductForModal] = useState<GroupedPOSProduct | null>(null);
+
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const loadVariants = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -72,8 +73,13 @@ export default function POSPage() {
     const { data, error } = await supabase
       .from("variantes_producto")
       .select(`
-        id, sku, sale_price, cost_price, min_stock, is_active,
-        productos!inner(id, name, categorias(name)),
+        id,
+        sku,
+        sale_price,
+        cost_price,
+        min_stock,
+        is_active,
+        productos(id, name, image_url, categorias(name)),
         colores(id, name, hex_code),
         tallas(id, name, sort_order),
         tipos_manga(id, name),
@@ -98,6 +104,7 @@ export default function POSPage() {
             name: v.productos?.name || "",
             description: null,
             categoryId: null,
+            imageUrl: v.productos?.image_url || null,
             category: v.productos?.categorias
               ? { id: "", tenantId: effectiveTenantId, name: v.productos.categorias.name, isActive: true }
               : null,
@@ -125,6 +132,16 @@ export default function POSPage() {
     setLoadingVariants(false);
   }, [effectiveTenantId]);
 
+  const loadClients = useCallback(async () => {
+    if (!effectiveTenantId) return;
+    try {
+      const data = await clientsService.getClients(effectiveTenantId);
+      setClients(data);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [effectiveTenantId]);
+
   useEffect(() => {
     loadVariants();
     loadClients();
@@ -134,182 +151,253 @@ export default function POSPage() {
     searchRef.current?.focus();
   }, []);
 
-  const filteredVariants = variants.filter((v) => {
+  // Agrupar variantes por modelo base de guayabera para el POS
+  const groupedProducts: GroupedPOSProduct[] = (() => {
+    const map = new Map<string, GroupedPOSProduct>();
+
+    variants.forEach((v) => {
+      if (!v.product) return;
+      const pId = v.productId;
+
+      if (!map.has(pId)) {
+        map.set(pId, {
+          productId: pId,
+          name: v.product.name,
+          categoryName: v.product.category?.name || "Guayabera",
+          imageUrl: v.product.imageUrl || null,
+          minPrice: v.salePrice,
+          maxPrice: v.salePrice,
+          totalStock: 0,
+          availableColors: [],
+          variants: [],
+        });
+      }
+
+      const entry = map.get(pId)!;
+      entry.minPrice = Math.min(entry.minPrice, v.salePrice);
+      entry.maxPrice = Math.max(entry.maxPrice, v.salePrice);
+      entry.totalStock += v.totalStock || 0;
+
+      if (v.color?.name && !entry.availableColors.some((c) => c.name === v.color?.name)) {
+        entry.availableColors.push({
+          name: v.color.name,
+          hexCode: v.color.hexCode || null,
+        });
+      }
+
+      entry.variants.push(v);
+    });
+
+    return Array.from(map.values());
+  })();
+
+  // Filtrar modelos por búsqueda
+  const filteredProducts = groupedProducts.filter((p) => {
+    if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
     return (
-      v.sku.toLowerCase().includes(q) ||
-      (v.product?.name || "").toLowerCase().includes(q) ||
-      (v.color?.name || "").toLowerCase().includes(q) ||
-      (v.size?.name || "").toLowerCase().includes(q)
+      p.name.toLowerCase().includes(q) ||
+      p.variants.some((v) => v.sku.toLowerCase().includes(q) || v.color?.name.toLowerCase().includes(q))
     );
   });
 
-  const cashReceivedNum = parseFloat(cashReceived) || 0;
-  const change = selectedPaymentMethod === "cash"
-    ? Math.max(0, cashReceivedNum - cart.total())
-    : 0;
+  // Agregar al carrito desde el modal de variantes
+  const handleAddToCartFromModal = (variant: ProductVariant, quantity: number) => {
+    cart.addItem(variant, quantity);
+  };
 
-  const handleCompleteSale = async () => {
-    if (!tenant?.id || !session?.userId) return;
-    if (cart.items.length === 0) {
-      setErrorMsg("El carrito está vacío.");
-      return;
-    }
+  // Manejo de totales calculados desde el store
+  const subtotal = cart.subtotal();
+  const discountAmount = cart.discountAmount();
+  const total = cart.total();
 
-    const payments: { method: PaymentMethod; amount: number }[] = [
-      { method: selectedPaymentMethod, amount: cart.total() },
-    ];
-
-    setIsSubmitting(true);
+  const handleStartCheckout = () => {
+    if (cart.items.length === 0) return;
     setErrorMsg(null);
+    setCashReceived(total.toString());
+    setCheckoutStep("payment");
+  };
 
-    const result = await salesService.completeSale({
-      tenantId: tenant.id,
-      sellerId: session.userId,
-      items: cart.items,
-      payments,
-      clientId: cart.clientId,
-      globalDiscountPercent: cart.globalDiscountPercent,
-      notes: cart.notes,
-    });
-
-    setIsSubmitting(false);
-
-    if (!result.success) {
-      setErrorMsg(result.error || "Error al registrar la venta.");
+  const handleProcessPayment = async () => {
+    if (!effectiveTenantId) {
+      setErrorMsg("No hay un negocio activo.");
       return;
     }
+    setErrorMsg(null);
+    setIsSubmitting(true);
 
-    // Preparar datos de ticket
-    setLastTicket({
-      ticketNumber: result.ticketNumber!,
-      items: cart.items.map((item) => ({
-        sku: item.variant.sku,
-        productName: item.variant.product?.name || "Producto",
-        colorName: item.variant.color?.name || null,
-        sizeName: item.variant.size?.name || null,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        subtotal:
-          item.unitPrice * item.quantity * (1 - item.discountPercent / 100),
-      })),
-      subtotal: cart.subtotal(),
-      discountAmount: cart.discountAmount(),
-      total: cart.total(),
-      payments,
-      change,
-      createdAt: new Date().toLocaleString("es-MX"),
-    });
+    try {
+      const parsedCash = parseFloat(cashReceived) || total;
+      const change = selectedPaymentMethod === "cash" ? Math.max(0, parsedCash - total) : 0;
 
-    cart.clearCart();
-    setCheckoutStep("success");
-    loadVariants(); // refrescar stock
+      const result = await salesService.completeSale({
+        tenantId: effectiveTenantId,
+        sellerId: session?.userId || "",
+        clientId: cart.clientId,
+        items: cart.items,
+        globalDiscountPercent: cart.globalDiscountPercent,
+        notes: cart.notes,
+        payments: [
+          {
+            method: selectedPaymentMethod,
+            amount: total,
+          },
+        ],
+      });
+
+      if (!result.success || !result.ticketNumber) {
+        throw new Error(result.error || "Error al registrar la venta.");
+      }
+
+      setLastTicket({
+        ticketNumber: result.ticketNumber,
+        items: cart.items.map((i) => ({
+          sku: i.variant.sku,
+          productName: i.variant.product?.name || "Guayabera",
+          colorName: i.variant.color?.name || null,
+          sizeName: i.variant.size?.name || null,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+          subtotal: i.unitPrice * i.quantity,
+        })),
+        subtotal,
+        discountAmount,
+        total,
+        payments: [
+          {
+            method: selectedPaymentMethod,
+            amount: total,
+          },
+        ],
+        change,
+        createdAt: new Date().toISOString(),
+      });
+
+      cart.clearCart();
+      setCheckoutStep("success");
+      loadVariants();
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al procesar la venta.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleNewSale = () => {
     setCheckoutStep("cart");
-    setSelectedPaymentMethod("cash");
-    setCashReceived("");
     setLastTicket(null);
-    setErrorMsg(null);
-    setTimeout(() => searchRef.current?.focus(), 100);
+    searchRef.current?.focus();
   };
 
   const handlePrintTicket = () => {
     window.print();
   };
 
-  const methodLabel = (m: PaymentMethod) =>
-    m === "cash" ? "Efectivo" : m === "card" ? "Tarjeta" : "Transferencia";
-
   return (
-    <div className="flex h-[calc(100vh-64px)] gap-0 -mx-6 -mt-4 overflow-hidden">
-
-      {/* ======= LADO IZQUIERDO: CATALOGO ======= */}
-      <div className="flex flex-col flex-1 min-w-0 bg-[#F8F6F1] border-r border-[#DDD9D0]">
-
-        {/* Buscador */}
+    <div className="flex flex-col lg:flex-row h-[calc(100vh-65px)] overflow-hidden bg-[#F8F6F1]">
+      {/* ============================================================
+          PANEL IZQUIERDO: CATÁLOGO AGRUPADO POR MODELO DE GUAYABERA
+          ============================================================ */}
+      <div className="flex-1 flex flex-col min-w-0 border-r border-[#DDD9D0] bg-white">
+        {/* Barra de búsqueda */}
         <div className="p-4 border-b border-[#DDD9D0] bg-white">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
             <input
               ref={searchRef}
               type="text"
-              placeholder="Buscar por SKU, modelo, color o talla..."
+              placeholder="Buscar modelo o escanear código SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2.5 text-sm bg-[#F8F6F1] border border-[#DDD9D0] rounded-xl focus:outline-none focus:border-[#556B5D] focus:bg-white transition-colors"
+              className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F6F1] border border-[#DDD9D0] rounded-xl focus:outline-none focus:border-[#556B5D] focus:bg-white transition-colors"
             />
           </div>
         </div>
 
-        {/* Grid de productos */}
+        {/* Cuadrícula de Modelos de Guayabera (1 tarjeta por modelo) */}
         <div className="flex-1 overflow-y-auto p-4">
           {loadingVariants ? (
-            <div className="flex items-center justify-center h-40 text-[#6B7A71]">
-              Cargando catálogo...
+            <div className="flex items-center justify-center h-40 text-xs text-[#6B7A71]">
+              Cargando modelos...
             </div>
-          ) : filteredVariants.length === 0 ? (
+          ) : filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 text-[#6B7A71] gap-2">
               <Package className="w-8 h-8 text-[#DDD9D0]" />
-              <p className="text-sm">
-                {searchQuery ? "Sin resultados para esa búsqueda" : "No hay productos en el catálogo"}
+              <p className="text-xs">
+                {searchQuery ? "Sin resultados para esa búsqueda" : "No hay modelos en el catálogo"}
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-              {filteredVariants.map((variant) => {
-                const isOutOfStock = (variant.totalStock ?? 0) === 0;
-                const inCart = cart.items.find((i) => i.variantId === variant.id);
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3.5">
+              {filteredProducts.map((prod) => {
+                const isOutOfStock = prod.totalStock <= 0;
+
                 return (
                   <button
-                    key={variant.id}
-                    onClick={() => !isOutOfStock && cart.addItem(variant)}
-                    disabled={isOutOfStock}
-                    className={`relative text-left p-3 rounded-xl border transition-all group ${
-                      isOutOfStock
-                        ? "bg-white border-[#DDD9D0] opacity-50 cursor-not-allowed"
-                        : inCart
-                        ? "bg-[#EBF5F0] border-[#3F7D58] shadow-sm"
-                        : "bg-white border-[#DDD9D0] hover:border-[#556B5D] hover:shadow-sm active:scale-95"
-                    }`}
+                    key={prod.productId}
+                    onClick={() => setSelectedProductForModal(prod)}
+                    className="relative text-left p-3 rounded-2xl border border-[#DDD9D0] bg-white hover:border-[#556B5D] hover:shadow-md active:scale-98 transition-all group flex flex-col justify-between"
                   >
-                    {/* Color dot */}
-                    {variant.color?.hexCode && (
-                      <span
-                        className="inline-block w-3 h-3 rounded-full mb-1.5 border border-black/10"
-                        style={{ backgroundColor: variant.color.hexCode }}
-                      />
-                    )}
+                    <div>
+                      {/* Miniatura de Foto de Portada */}
+                      <div className="aspect-4/3 w-full rounded-xl overflow-hidden bg-[#F8F6F1] mb-2.5 flex items-center justify-center border border-[#DDD9D0] group-hover:scale-102 transition-transform">
+                        {prod.imageUrl ? (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center text-[#8FA393]">
+                            <Shirt className="w-8 h-8 stroke-1" />
+                          </div>
+                        )}
+                      </div>
 
-                    <p className="text-xs font-mono text-[#556B5D] truncate">{variant.sku}</p>
-                    <p className="text-sm font-semibold text-[#26302B] truncate mt-0.5">
-                      {variant.product?.name}
-                    </p>
-                    <p className="text-xs text-[#6B7A71] truncate">
-                      {[variant.color?.name, variant.size?.name].filter(Boolean).join(" / ")}
-                    </p>
-                    <p className="text-base font-bold text-[#26302B] mt-2">
-                      ${variant.salePrice.toFixed(2)}
-                    </p>
-
-                    {/* Stock badge */}
-                    <span className={`absolute top-2 right-2 text-xs px-1.5 py-0.5 rounded font-semibold ${
-                      isOutOfStock
-                        ? "bg-[#FAEAEA] text-[#B85450]"
-                        : (variant.totalStock ?? 0) <= variant.minStock
-                        ? "bg-[#FDF5E4] text-[#D89B2B]"
-                        : "bg-[#EBF5F0] text-[#3F7D58]"
-                    }`}>
-                      {isOutOfStock ? "Agotado" : `${variant.totalStock ?? 0}`}
-                    </span>
-
-                    {/* In cart indicator */}
-                    {inCart && (
-                      <span className="absolute bottom-2 right-2 text-xs font-bold text-[#3F7D58]">
-                        x{inCart.quantity}
+                      {/* Stock Badge */}
+                      <span className={`absolute top-4 right-4 text-[10px] px-2 py-0.5 rounded-md font-bold shadow-xs ${
+                        isOutOfStock
+                          ? "bg-[#FAEAEA] text-[#B85450]"
+                          : "bg-[#EBF5F0] text-[#3F7D58] border border-[#A7D7B9]"
+                      }`}>
+                        {isOutOfStock ? "Agotado" : `${prod.totalStock} pzas`}
                       </span>
-                    )}
+
+                      {/* Nombre y Categoría */}
+                      <span className="text-[10px] font-bold text-[#556B5D] uppercase tracking-wider block">
+                        {prod.categoryName}
+                      </span>
+                      <p className="text-sm font-extrabold text-[#26302B] font-[Outfit] truncate mt-0.5">
+                        {prod.name}
+                      </p>
+
+                      {/* Colores disponibles */}
+                      {prod.availableColors.length > 0 && (
+                        <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+                          {prod.availableColors.map((c) => (
+                            <span
+                              key={c.name}
+                              className="w-2.5 h-2.5 rounded-full border border-black/15 inline-block"
+                              style={{ backgroundColor: c.hexCode || "#CCCCCC" }}
+                              title={c.name}
+                            />
+                          ))}
+                          <span className="text-[10px] text-[#8FA393] ml-0.5">
+                            {prod.variants.length} variante{prod.variants.length > 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Precio */}
+                    <div className="mt-3 pt-2 border-t border-[#DDD9D0] flex items-center justify-between">
+                      <span className="text-base font-extrabold font-mono text-[#3F7D58]">
+                        ${prod.minPrice.toFixed(2)}
+                      </span>
+                      <span className="text-[10px] font-bold text-[#556B5D] bg-[#EBF0EC] px-2 py-0.5 rounded-md">
+                        Elegir Talla ➔
+                      </span>
+                    </div>
                   </button>
                 );
               })}
@@ -318,24 +406,21 @@ export default function POSPage() {
         </div>
       </div>
 
-      {/* ======= LADO DERECHO: CARRITO ======= */}
-      <div className="flex flex-col w-[380px] shrink-0 bg-white">
-
-        {/* Header carrito */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#DDD9D0] bg-[#F8F6F1]">
+      {/* ============================================================
+          PANEL DERECHO: CARRITO Y COBRO
+          ============================================================ */}
+      <div className="w-full lg:w-96 flex flex-col bg-[#F8F6F1] shrink-0">
+        {/* Header Carrito */}
+        <div className="p-4 border-b border-[#DDD9D0] bg-white flex items-center justify-between">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-[#556B5D]" />
-            <span className="font-semibold text-[#26302B]">Carrito</span>
-            {cart.itemCount() > 0 && (
-              <span className="px-2 py-0.5 text-xs font-bold bg-[#556B5D] text-white rounded-full">
-                {cart.itemCount()}
-              </span>
-            )}
+            <span className="font-bold text-sm text-[#26302B] font-[Outfit]">Venta en Mostrador</span>
           </div>
+
           {cart.items.length > 0 && (
             <button
-              onClick={cart.clearCart}
-              className="text-xs text-[#B85450] hover:underline flex items-center gap-1"
+              onClick={() => cart.clearCart()}
+              className="text-xs text-[#B85450] hover:underline flex items-center gap-1 font-semibold"
             >
               <Trash2 className="w-3.5 h-3.5" />
               Limpiar
@@ -345,7 +430,7 @@ export default function POSPage() {
 
         {/* Selector de Cliente */}
         <div className="p-3 border-b border-[#DDD9D0] bg-white">
-          <label className="block text-[11px] font-semibold text-[#6B7A71] uppercase tracking-wider mb-1 flex items-center justify-between">
+          <label className="block text-[10px] font-bold text-[#6B7A71] uppercase tracking-wider mb-1 flex items-center justify-between">
             <span className="flex items-center gap-1">
               <User className="w-3.5 h-3.5 text-[#556B5D]" /> Cliente Asignado
             </span>
@@ -370,7 +455,7 @@ export default function POSPage() {
                 }
               }
             }}
-            className="w-full px-2.5 py-1.5 text-xs border border-[#DDD9D0] rounded-lg bg-[#F8F6F1] text-[#26302B] focus:outline-none focus:border-[#556B5D]"
+            className="w-full px-2.5 py-1.5 text-xs border border-[#DDD9D0] rounded-xl bg-[#F8F6F1] text-[#26302B] focus:outline-none focus:border-[#556B5D]"
           >
             <option value="">Público General (Sin registrar)</option>
             {clients.map((c) => (
@@ -388,277 +473,230 @@ export default function POSPage() {
               {cart.items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-[#6B7A71] gap-3 py-12">
                   <ShoppingCart className="w-12 h-12 text-[#DDD9D0]" />
-                  <p className="text-sm">El carrito está vacío</p>
-                  <p className="text-xs text-[#9DAAA2]">Haz clic en un producto para agregarlo</p>
+                  <p className="text-xs">El carrito está vacío</p>
+                  <p className="text-[10px] text-[#9DAAA2]">Seleccione un modelo para elegir talla y color</p>
                 </div>
               ) : (
-                cart.items.map((item) => (
-                  <div key={item.variantId} className="p-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-mono text-[#556B5D]">{item.variant.sku}</p>
-                        <p className="text-sm font-semibold text-[#26302B] truncate">
-                          {item.variant.product?.name}
-                        </p>
-                        <p className="text-xs text-[#6B7A71]">
-                          {[item.variant.color?.name, item.variant.size?.name]
-                            .filter(Boolean)
-                            .join(" / ")}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => cart.removeItem(item.variantId)}
-                        className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded transition-colors shrink-0"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+                cart.items.map((item) => {
+                  const lineTotal = item.unitPrice * item.quantity * (1 - (item.discountPercent || 0) / 100);
 
-                    <div className="flex items-center justify-between mt-2">
-                      {/* Cantidad */}
-                      <div className="flex items-center gap-1">
+                  return (
+                    <div key={item.variantId} className="p-3 bg-white">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-mono text-[#556B5D]">{item.variant.sku}</p>
+                          <p className="text-xs font-bold text-[#26302B] truncate">
+                            {item.variant.product?.name}
+                          </p>
+                          <p className="text-[10px] text-[#6B7A71]">
+                            {[item.variant.color?.name, item.variant.size?.name ? `Talla ${item.variant.size.name}` : null]
+                              .filter(Boolean)
+                              .join(" / ")}
+                          </p>
+                        </div>
                         <button
-                          onClick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded-full border border-[#DDD9D0] text-[#26302B] hover:bg-[#F8F6F1] transition-colors"
+                          onClick={() => cart.removeItem(item.variantId)}
+                          className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg transition-colors shrink-0"
                         >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-bold">{item.quantity}</span>
-                        <button
-                          onClick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded-full border border-[#DDD9D0] text-[#26302B] hover:bg-[#F8F6F1] transition-colors"
-                        >
-                          <Plus className="w-3 h-3" />
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
-                      {/* Precio y descuento */}
-                      <div className="text-right">
-                        <p className="text-sm font-bold text-[#26302B]">
-                          ${(item.unitPrice * item.quantity * (1 - item.discountPercent / 100)).toFixed(2)}
-                        </p>
-                        <p className="text-xs text-[#9DAAA2]">
-                          ${item.unitPrice.toFixed(2)} c/u
-                        </p>
+                      <div className="flex items-center justify-between mt-2">
+                        {/* Cantidad */}
+                        <div className="flex items-center gap-1 bg-[#F8F6F1] p-0.5 rounded-lg border border-[#DDD9D0]">
+                          <button
+                            onClick={() => cart.updateQuantity(item.variantId, item.quantity - 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded bg-white text-[#26302B] shadow-xs text-xs font-bold"
+                          >
+                            -
+                          </button>
+                          <span className="w-6 text-center text-xs font-bold font-mono">{item.quantity}</span>
+                          <button
+                            onClick={() => cart.updateQuantity(item.variantId, item.quantity + 1)}
+                            className="w-6 h-6 flex items-center justify-center rounded bg-[#556B5D] text-white shadow-xs text-xs font-bold"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Subtotal linea */}
+                        <span className="text-xs font-bold font-mono text-[#26302B]">
+                          ${lineTotal.toFixed(2)}
+                        </span>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Descuento global */}
-            {cart.items.length > 0 && (
-              <div className="px-3 py-2 border-t border-[#DDD9D0] flex items-center gap-2">
-                <Percent className="w-4 h-4 text-[#6B7A71] shrink-0" />
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  placeholder="Descuento global %"
-                  value={cart.globalDiscountPercent || ""}
-                  onChange={(e) => cart.setGlobalDiscount(Number(e.target.value))}
-                  className="flex-1 text-sm px-2 py-1.5 border border-[#DDD9D0] rounded-lg focus:outline-none focus:border-[#556B5D]"
-                />
-              </div>
-            )}
-
-            {/* Totales */}
-            {cart.items.length > 0 && (
-              <div className="p-3 border-t border-[#DDD9D0] bg-[#F8F6F1] space-y-1.5">
-                <div className="flex justify-between text-sm text-[#6B7A71]">
-                  <span>Subtotal</span>
-                  <span>${cart.subtotal().toFixed(2)}</span>
+            {/* Totales y Botón Cobrar */}
+            <div className="p-4 border-t border-[#DDD9D0] bg-white space-y-3">
+              <div className="space-y-1.5 text-xs">
+                <div className="flex justify-between text-[#6B7A71]">
+                  <span>Subtotal:</span>
+                  <span className="font-mono">${subtotal.toFixed(2)}</span>
                 </div>
-                {cart.discountAmount() > 0 && (
-                  <div className="flex justify-between text-sm text-[#B85450]">
-                    <span>Descuento</span>
-                    <span>-${cart.discountAmount().toFixed(2)}</span>
+
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-[#3F7D58] font-semibold">
+                    <span>Descuento:</span>
+                    <span className="font-mono">-${discountAmount.toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-lg font-bold text-[#26302B] pt-1 border-t border-[#DDD9D0]">
-                  <span>Total</span>
-                  <span>${cart.total().toFixed(2)}</span>
+
+                <div className="flex justify-between text-base font-extrabold text-[#26302B] pt-2 border-t border-[#DDD9D0]">
+                  <span>TOTAL:</span>
+                  <span className="font-mono text-[#3F7D58] text-lg">${total.toFixed(2)} MXN</span>
                 </div>
-                <Button
-                  className="w-full mt-2"
-                  onClick={() => setCheckoutStep("payment")}
-                  disabled={cart.items.length === 0}
-                >
-                  Continuar al Cobro
-                </Button>
               </div>
-            )}
+
+              <Button
+                className="w-full bg-[#3F7D58] hover:bg-[#326446] text-white font-bold py-3 text-sm rounded-xl shadow-md"
+                disabled={cart.items.length === 0}
+                onClick={handleStartCheckout}
+              >
+                Cobrar ${total.toFixed(2)}
+              </Button>
+            </div>
           </>
         )}
 
+        {/* Pasos de Pago */}
         {checkoutStep === "payment" && (
-          <div className="flex flex-col flex-1">
-            {/* Resumen de total */}
-            <div className="p-4 bg-[#26302B] text-white">
-              <p className="text-xs text-[#8FA393]">Total a cobrar</p>
-              <p className="text-3xl font-bold mt-0.5">${cart.total().toFixed(2)}</p>
-              <p className="text-xs text-[#8FA393] mt-1">{cart.itemCount()} artículos</p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Metodo de pago */}
-              <div>
-                <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider mb-2">
-                  Metodo de Pago
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["cash", "card", "transfer"] as PaymentMethod[]).map((method) => (
-                    <button
-                      key={method}
-                      onClick={() => setSelectedPaymentMethod(method)}
-                      className={`flex flex-col items-center justify-center gap-1.5 py-3 px-2 rounded-xl border text-xs font-semibold transition-all ${
-                        selectedPaymentMethod === method
-                          ? "bg-[#26302B] border-[#26302B] text-white shadow-sm"
-                          : "bg-white border-[#DDD9D0] text-[#6B7A71] hover:bg-[#F8F6F1]"
-                      }`}
-                    >
-                      {method === "cash" ? (
-                        <Banknote className="w-5 h-5" />
-                      ) : method === "card" ? (
-                        <CreditCard className="w-5 h-5" />
-                      ) : (
-                        <ArrowRightLeft className="w-5 h-5" />
-                      )}
-                      {methodLabel(method)}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Efectivo recibido */}
-              {selectedPaymentMethod === "cash" && (
-                <div>
-                  <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider mb-2">
-                    Efectivo Recibido
-                  </p>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    placeholder="$0.00"
-                    value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
-                    className="w-full px-4 py-3 text-xl font-bold border border-[#DDD9D0] rounded-xl focus:outline-none focus:border-[#556B5D] text-center"
-                  />
-                  {cashReceivedNum >= cart.total() && (
-                    <div className="mt-2 p-3 bg-[#EBF5F0] rounded-xl flex justify-between items-center">
-                      <span className="text-sm text-[#3F7D58] font-semibold">Cambio a entregar</span>
-                      <span className="text-xl font-bold text-[#3F7D58]">
-                        ${change.toFixed(2)}
-                      </span>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Error */}
-              {errorMsg && (
-                <div className="p-3 bg-[#FAEAEA] text-[#B85450] text-sm rounded-xl border border-[#B85450]/20">
-                  {errorMsg}
-                </div>
-              )}
-            </div>
-
-            {/* Botones */}
-            <div className="p-3 border-t border-[#DDD9D0] space-y-2">
-              <Button
-                className="w-full"
-                onClick={handleCompleteSale}
-                loading={isSubmitting}
-                disabled={
-                  isSubmitting ||
-                  (selectedPaymentMethod === "cash" && cashReceivedNum < cart.total() && cashReceivedNum > 0)
-                }
-              >
-                <CheckCircle className="w-4 h-4" />
-                Confirmar Venta
-              </Button>
-              <Button
-                variant="outline"
-                className="w-full"
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-white">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-sm text-[#26302B]">Método de Pago</h3>
+              <button
                 onClick={() => setCheckoutStep("cart")}
-                disabled={isSubmitting}
+                className="text-xs text-[#556B5D] hover:underline"
               >
                 Volver al Carrito
-              </Button>
+              </button>
             </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                onClick={() => setSelectedPaymentMethod("cash")}
+                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 text-xs font-bold transition-all ${
+                  selectedPaymentMethod === "cash"
+                    ? "bg-[#556B5D] text-white border-[#556B5D] shadow-sm"
+                    : "bg-[#F8F6F1] text-[#26302B] border-[#DDD9D0]"
+                }`}
+              >
+                <Banknote className="w-5 h-5" />
+                Efectivo
+              </button>
+
+              <button
+                onClick={() => setSelectedPaymentMethod("card")}
+                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 text-xs font-bold transition-all ${
+                  selectedPaymentMethod === "card"
+                    ? "bg-[#556B5D] text-white border-[#556B5D] shadow-sm"
+                    : "bg-[#F8F6F1] text-[#26302B] border-[#DDD9D0]"
+                }`}
+              >
+                <CreditCard className="w-5 h-5" />
+                Tarjeta
+              </button>
+
+              <button
+                onClick={() => setSelectedPaymentMethod("transfer")}
+                className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 text-xs font-bold transition-all ${
+                  selectedPaymentMethod === "transfer"
+                    ? "bg-[#556B5D] text-white border-[#556B5D] shadow-sm"
+                    : "bg-[#F8F6F1] text-[#26302B] border-[#DDD9D0]"
+                }`}
+              >
+                <ArrowRightLeft className="w-5 h-5" />
+                Transf.
+              </button>
+            </div>
+
+            {selectedPaymentMethod === "cash" && (
+              <div className="space-y-2 pt-2">
+                <label className="block text-xs font-bold text-[#26302B]">Monto Recibido en Efectivo:</label>
+                <input
+                  type="number"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  className="w-full px-3 py-2 text-base font-bold font-mono border border-[#DDD9D0] rounded-xl"
+                  placeholder="0.00"
+                />
+
+                {parseFloat(cashReceived) >= total && (
+                  <div className="p-3 bg-[#EBF5F0] border border-[#A7D7B9] rounded-xl flex items-center justify-between text-xs">
+                    <span className="font-bold text-[#26302B]">Cambio / Vuelto:</span>
+                    <span className="font-mono font-bold text-[#3F7D58] text-base">
+                      ${(parseFloat(cashReceived) - total).toFixed(2)} MXN
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {errorMsg && (
+              <div className="p-3 bg-[#FAEAEA] border border-[#B85450]/30 rounded-xl text-xs text-[#B85450]">
+                {errorMsg}
+              </div>
+            )}
+
+            <Button
+              className="w-full bg-[#3F7D58] hover:bg-[#326446] text-white font-bold py-3 text-sm rounded-xl mt-4"
+              disabled={isSubmitting}
+              onClick={handleProcessPayment}
+            >
+              {isSubmitting ? "Procesando Venta..." : `Confirmar Pago de $${total.toFixed(2)}`}
+            </Button>
           </div>
         )}
 
+        {/* Pantalla de Éxito y Ticket */}
         {checkoutStep === "success" && lastTicket && (
-          <div className="flex flex-col flex-1 overflow-y-auto">
-            {/* Encabezado exito */}
-            <div className="p-6 bg-[#EBF5F0] flex flex-col items-center text-center border-b border-[#DDD9D0]">
-              <CheckCircle className="w-12 h-12 text-[#3F7D58] mb-2" />
-              <p className="text-lg font-bold text-[#26302B]">Venta Registrada</p>
-              <p className="text-sm text-[#6B7A71] mt-1">
-                Ticket <span className="font-mono font-bold text-[#556B5D]">{lastTicket.ticketNumber}</span>
-              </p>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-white flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-[#EBF5F0] text-[#3F7D58] flex items-center justify-center">
+              <CheckCircle className="w-6 h-6" />
             </div>
 
-            {/* Ticket de venta */}
-            <div className="flex-1 p-4 space-y-3">
-              <div className="text-xs text-[#6B7A71] text-center">{lastTicket.createdAt}</div>
-
-              <div className="border border-[#DDD9D0] rounded-xl overflow-hidden">
-                {lastTicket.items.map((item, i) => (
-                  <div key={i} className="flex justify-between items-center px-3 py-2 border-b border-[#DDD9D0] last:border-0">
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-[#26302B] truncate">{item.productName}</p>
-                      <p className="text-xs text-[#9DAAA2]">
-                        {[item.colorName, item.sizeName].filter(Boolean).join(" / ")} x{item.quantity}
-                      </p>
-                    </div>
-                    <span className="text-sm font-semibold text-[#26302B] shrink-0 ml-2">
-                      ${item.subtotal.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between text-[#6B7A71]">
-                  <span>Subtotal</span><span>${lastTicket.subtotal.toFixed(2)}</span>
-                </div>
-                {lastTicket.discountAmount > 0 && (
-                  <div className="flex justify-between text-[#B85450]">
-                    <span>Descuento</span><span>-${lastTicket.discountAmount.toFixed(2)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-base text-[#26302B] pt-1 border-t border-[#DDD9D0]">
-                  <span>Total</span><span>${lastTicket.total.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-[#6B7A71]">
-                  <span>Pago ({methodLabel(lastTicket.payments[0]?.method)})</span>
-                  <span>${lastTicket.payments[0]?.amount.toFixed(2)}</span>
-                </div>
-                {lastTicket.change > 0 && (
-                  <div className="flex justify-between text-[#3F7D58] font-semibold">
-                    <span>Cambio</span><span>${lastTicket.change.toFixed(2)}</span>
-                  </div>
-                )}
-              </div>
+            <div>
+              <h3 className="font-bold text-base text-[#26302B]">¡Venta Completada!</h3>
+              <p className="text-xs text-[#6B7A71] mt-0.5">Ticket #{lastTicket.ticketNumber}</p>
             </div>
 
-            <div className="p-3 border-t border-[#DDD9D0] space-y-2">
+            <div className="w-full p-4 bg-[#F8F6F1] rounded-2xl border border-[#DDD9D0] space-y-2 text-xs text-left font-mono">
+              <div className="flex justify-between font-bold text-sm text-[#26302B] border-b border-[#DDD9D0] pb-2">
+                <span>TOTAL:</span>
+                <span>${lastTicket.total.toFixed(2)}</span>
+              </div>
+              {lastTicket.change > 0 && (
+                <div className="flex justify-between text-[#3F7D58] font-bold pt-1">
+                  <span>Cambio Entregado:</span>
+                  <span>${lastTicket.change.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="w-full space-y-2 pt-2">
               <Button variant="outline" className="w-full" onClick={handlePrintTicket}>
-                <Printer className="w-4 h-4" />
+                <Printer className="w-4 h-4 mr-1.5" />
                 Imprimir Ticket
               </Button>
-              <Button className="w-full" onClick={handleNewSale}>
-                <Plus className="w-4 h-4" />
+              <Button className="w-full bg-[#556B5D] hover:bg-[#44564A]" onClick={handleNewSale}>
                 Nueva Venta
               </Button>
             </div>
           </div>
         )}
       </div>
+
+      {/* Modal de Selección Rápida de Variantes */}
+      <POSVariantSelectModal
+        isOpen={!!selectedProductForModal}
+        onClose={() => setSelectedProductForModal(null)}
+        product={selectedProductForModal}
+        onAddToCart={handleAddToCartFromModal}
+      />
     </div>
   );
 }

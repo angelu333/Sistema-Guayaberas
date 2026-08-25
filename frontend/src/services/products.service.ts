@@ -1,4 +1,4 @@
-﻿import { createClient } from "@/lib/supabase/client";
+import { createClient } from "@/lib/supabase/client";
 import {
   Product,
   ProductVariant,
@@ -12,6 +12,8 @@ export interface CreateProductDTO {
   name: string;
   description?: string;
   categoryId?: string;
+  imageUrl?: string;
+  images?: { url: string; isPrimary: boolean }[];
   variants: CreateVariantDTO[];
 }
 
@@ -56,7 +58,16 @@ export const productsService = {
         is_active,
         created_at,
         updated_at,
-        product:productos(id, name, description, category_id, is_active, category:categorias(id, name)),
+        product:productos(
+          id, 
+          name, 
+          description, 
+          category_id, 
+          image_url,
+          is_active, 
+          category:categorias(id, name),
+          images:imagenes_producto(id, url, sort_order, is_primary)
+        ),
         color:colores(id, name, hex_code),
         size:tallas(id, name, sort_order),
         sleeveType:tipos_manga(id, name),
@@ -96,6 +107,14 @@ export const productsService = {
         name: item.product.name,
         description: item.product.description,
         categoryId: item.product.category_id,
+        imageUrl: item.product.image_url || null,
+        images: (item.product.images || []).map((img: any) => ({
+          id: img.id,
+          productId: item.product.id,
+          url: img.url,
+          sortOrder: img.sort_order,
+          isPrimary: img.is_primary,
+        })),
         category: item.product.category ? {
           id: item.product.category.id,
           tenantId: item.tenant_id,
@@ -143,6 +162,36 @@ export const productsService = {
       })),
     }));
 
+    // Obtener existencias actuales agrupadas por variante
+    const variantIds = variants.map((v) => v.id);
+    if (variantIds.length > 0) {
+      const { data: stockData } = await supabase
+        .from("existencias")
+        .select("variant_id, location_id, quantity, ubicaciones(name)")
+        .in("variant_id", variantIds);
+
+      if (stockData) {
+        const stockMap = new Map<string, { total: number; locations: any[] }>();
+
+        stockData.forEach((s: any) => {
+          const current = stockMap.get(s.variant_id) || { total: 0, locations: [] };
+          current.total += s.quantity;
+          current.locations.push({
+            locationId: s.location_id,
+            locationName: s.ubicaciones?.name || "Ubicación",
+            quantity: s.quantity,
+          });
+          stockMap.set(s.variant_id, current);
+        });
+
+        variants = variants.map((v) => ({
+          ...v,
+          totalStock: stockMap.get(v.id)?.total ?? 0,
+          stockByLocation: stockMap.get(v.id)?.locations ?? [],
+        }));
+      }
+    }
+
     // Filtro rapido en memoria si se provee busqueda
     if (filters?.search) {
       const q = filters.search.toLowerCase().trim();
@@ -159,10 +208,13 @@ export const productsService = {
   },
 
   /**
-   * Crea un nuevo producto base con sus variantes
+   * Crea un nuevo producto base y sus variantes iniciales
    */
   async createProduct(tenantId: string, dto: CreateProductDTO): Promise<string> {
     const supabase = createClient();
+
+    // Determinar foto de portada
+    const primaryImg = dto.images?.find((img) => img.isPrimary)?.url || dto.imageUrl || dto.images?.[0]?.url || null;
 
     // 1. Crear el producto base
     const { data: product, error: productError } = await supabase
@@ -170,9 +222,9 @@ export const productsService = {
       .insert({
         tenant_id: tenantId,
         name: dto.name.trim(),
-        description: dto.description || null,
+        description: dto.description?.trim() || null,
         category_id: dto.categoryId || null,
-        is_active: true,
+        image_url: primaryImg,
       })
       .select("id")
       .single();
@@ -181,7 +233,20 @@ export const productsService = {
       throw new Error(`Error al crear el producto: ${productError.message}`);
     }
 
-    // 2. Crear las variantes asociadas
+    // 2. Guardar galeria de imagenes del producto si existen
+    if (dto.images && dto.images.length > 0) {
+      const imageRows = dto.images.map((img, idx) => ({
+        tenant_id: tenantId,
+        product_id: product.id,
+        url: img.url,
+        sort_order: idx + 1,
+        is_primary: img.isPrimary,
+      }));
+
+      await supabase.from("imagenes_producto").insert(imageRows);
+    }
+
+    // 3. Crear las variantes asociadas
     const variantRows = dto.variants.map((v) => ({
       tenant_id: tenantId,
       product_id: product.id,
@@ -222,6 +287,32 @@ export const productsService = {
 
     if (error) {
       throw new Error(`Error al actualizar estado de la variante: ${error.message}`);
+    }
+  },
+
+  /**
+   * Elimina un producto/modelo completo y sus variantes
+   */
+  async deleteProduct(productId: string): Promise<void> {
+    const supabase = createClient();
+    await supabase.from("imagenes_producto").delete().eq("product_id", productId);
+    await supabase.from("variantes_producto").delete().eq("product_id", productId);
+    const { error } = await supabase.from("productos").delete().eq("id", productId);
+
+    if (error) {
+      throw new Error(`Error al eliminar el producto: ${error.message}`);
+    }
+  },
+
+  /**
+   * Elimina una variante específica
+   */
+  async deleteVariant(variantId: string): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase.from("variantes_producto").delete().eq("id", variantId);
+
+    if (error) {
+      throw new Error(`Error al eliminar la variante: ${error.message}`);
     }
   },
 
@@ -322,5 +413,73 @@ export const productsService = {
     const sCode = sizeName ? sizeName.toUpperCase() : "UNI";
 
     return `${pCode}-${cCode}-${sCode}`;
+  },
+
+  /**
+   * Actualiza los datos de un modelo base y su galería de fotografías
+   */
+  async updateProduct(
+    tenantId: string,
+    productId: string,
+    data: {
+      name: string;
+      description?: string;
+      categoryId?: string;
+      images?: { id?: string; url: string; isPrimary: boolean }[];
+    }
+  ): Promise<void> {
+    const supabase = createClient();
+
+    const primaryImg = data.images?.find((img) => img.isPrimary)?.url || data.images?.[0]?.url || null;
+
+    // 1. Actualizar producto base
+    const { error: prodErr } = await supabase
+      .from("productos")
+      .update({
+        name: data.name.trim(),
+        description: data.description?.trim() || null,
+        category_id: data.categoryId || null,
+        image_url: primaryImg,
+      })
+      .eq("id", productId);
+
+    if (prodErr) {
+      throw new Error(`Error al actualizar el producto: ${prodErr.message}`);
+    }
+
+    // 2. Reemplazar galería de fotos en imagenes_producto
+    if (data.images) {
+      await supabase.from("imagenes_producto").delete().eq("product_id", productId);
+
+      if (data.images.length > 0) {
+        const imageRows = data.images.map((img, idx) => ({
+          tenant_id: tenantId,
+          product_id: productId,
+          url: img.url,
+          sort_order: idx + 1,
+          is_primary: img.isPrimary,
+        }));
+        await supabase.from("imagenes_producto").insert(imageRows);
+      }
+    }
+  },
+
+  /**
+   * Obtiene las fotos de un producto específico
+   */
+  async getProductImages(productId: string): Promise<{ id: string; url: string; isPrimary: boolean }[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("imagenes_producto")
+      .select("id, url, is_primary, sort_order")
+      .eq("product_id", productId)
+      .order("sort_order", { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((d: any) => ({
+      id: d.id,
+      url: d.url,
+      isPrimary: d.is_primary,
+    }));
   },
 };

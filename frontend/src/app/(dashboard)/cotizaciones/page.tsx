@@ -101,6 +101,21 @@ export default function CotizacionesPage() {
     }
   };
 
+  // Convertir Cotización Aceptada a Venta Real
+  const handleConvertToSale = async (quote: QuoteRecord) => {
+    if (!confirm(`¿Desea convertir la Cotización ${quote.quoteNumber} de ${quote.clientName} en una Venta Oficial?\n\nEsto descontará automáticamente ${quote.totalPieces} guayaberas del inventario y registrará el cobro de $${quote.totalAmount.toFixed(2)} MXN.`)) {
+      return;
+    }
+
+    const res = await quotesService.convertQuoteToSale(quote.id, session?.userId);
+    if (res.success && res.ticketNumber) {
+      alert(`¡Venta Registrada con Éxito!\nTicket #${res.ticketNumber}\n\n- Se descontó el inventario físico.\n- Ya se refleja en el Historial de Ventas y Dashboard.`);
+      await loadData();
+    } else {
+      alert(res.error || "Error al convertir la cotización a venta.");
+    }
+  };
+
   // Copiar Link WhatsApp
   const handleCopyWhatsAppLink = (quote: QuoteRecord) => {
     const publicUrl = `${window.location.origin}/cotizacion/${quote.id}`;
@@ -325,14 +340,27 @@ export default function CotizacionesPage() {
                           <Share2 className="w-3.5 h-3.5 text-[#3F7D58]" />
                         </Button>
 
-                        {q.status !== "converted" && (
+                        {q.status === "draft" && (
                           <Button
                             size="sm"
                             onClick={() => handleChangeStatus(q.id, "accepted")}
-                            className="bg-[#3F7D58] hover:bg-[#326446] text-xs py-1"
-                            title="Marcar como Aceptada"
+                            className="bg-[#556B5D] hover:bg-[#44564A] text-xs py-1"
+                            title="Aceptar Cotización"
                           >
-                            <CheckCircle className="w-3.5 h-3.5" />
+                            <CheckCircle className="w-3.5 h-3.5 mr-1" />
+                            Aceptar
+                          </Button>
+                        )}
+
+                        {q.status === "accepted" && (
+                          <Button
+                            size="sm"
+                            onClick={() => handleConvertToSale(q)}
+                            className="bg-[#3F7D58] hover:bg-[#326446] text-xs py-1 text-white font-bold"
+                            title="Convertir a Venta Oficial (Descuenta Inventario)"
+                          >
+                            <ShoppingCart className="w-3.5 h-3.5 mr-1" />
+                            Cobrar / Vender
                           </Button>
                         )}
                       </div>

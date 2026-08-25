@@ -24,6 +24,7 @@ export interface AuthSessionData {
   role: UserRole;
   companyName: string;
   tenantSlug: string;
+  logoUrl?: string | null;
 }
 
 /**
@@ -172,7 +173,7 @@ export const authService = {
 
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("tenant_id, full_name, role, is_active, tenants(name, slug)")
+      .select("tenant_id, full_name, role, is_active, tenants(name, slug, logo_url, rfc, phone, email, address, whatsapp)")
       .eq("id", user.id)
       .single();
 
@@ -180,7 +181,11 @@ export const authService = {
       return null;
     }
 
-    const tenantObj = profile.tenants as unknown as { name: string; slug: string } | null;
+    const tenantObj = profile.tenants as unknown as {
+      name: string;
+      slug: string;
+      logo_url?: string | null;
+    } | null;
 
     return {
       userId: user.id,
@@ -190,6 +195,7 @@ export const authService = {
       role: profile.role as UserRole,
       companyName: tenantObj?.name || "Empresa",
       tenantSlug: tenantObj?.slug || "",
+      logoUrl: tenantObj?.logo_url || null,
     };
   },
 };

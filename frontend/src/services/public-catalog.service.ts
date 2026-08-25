@@ -21,9 +21,32 @@ export interface PublicFilterOptions {
 }
 
 export interface PublicCatalogFilters {
-  modelo?: string; // ID o Nombre de modelo
-  talla?: string;  // ID o Nombre de talla
-  color?: string;  // ID o Nombre de color
+  modelo?: string;
+  talla?: string;
+  color?: string;
+}
+
+export interface PublicProductView {
+  productId: string;
+  name: string;
+  description: string | null;
+  categoryName: string | null;
+  imageUrl: string | null;
+  images: { id: string; url: string; isPrimary: boolean }[];
+  minPrice: number;
+  maxPrice: number;
+  availableColors: string[];
+  availableSizes: string[];
+  totalStock: number;
+  variants: {
+    variantId: string;
+    sku: string;
+    colorName: string | null;
+    sizeName: string | null;
+    sleeveTypeName: string | null;
+    salePrice: number;
+    stock: number;
+  }[];
 }
 
 export const publicCatalogService = {
@@ -31,15 +54,42 @@ export const publicCatalogService = {
    * Obtiene la informacion publica de la empresa por su slug
    */
   async getPublicTenantBySlug(slug: string): Promise<PublicTenantInfo | null> {
-    const { data, error } = await supabase
+    // 1. Búsqueda exacta por slug
+    let { data, error } = await supabase
       .from("tenants")
       .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
       .eq("slug", slug)
       .eq("is_active", true)
-      .single();
+      .maybeSingle();
 
-    if (error || !data) {
-      console.error("Error al obtener tenant por slug:", error);
+    // 2. Si no encuentra por slug exacto, buscar por coincidencia en nombre o primer tenant activo
+    if (!data) {
+      const cleanSlug = slug.replace(/-/g, " ");
+      const { data: fallbackData } = await supabase
+        .from("tenants")
+        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+        .ilike("name", `%${cleanSlug}%`)
+        .eq("is_active", true)
+        .limit(1)
+        .maybeSingle();
+
+      data = fallbackData;
+    }
+
+    // 3. Si aún no encuentra, cargar la empresa activa más reciente
+    if (!data) {
+      const { data: latestTenant } = await supabase
+        .from("tenants")
+        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      data = latestTenant;
+    }
+
+    if (!data) {
       return null;
     }
 
@@ -56,7 +106,7 @@ export const publicCatalogService = {
   },
 
   /**
-   * Obtiene las opciones disponibles de Modelo, Talla y Color para poblar los 3 filtros
+   * Obtiene las opciones disponibles de Modelo, Talla y Color para poblar los filtros
    */
   async getPublicFilterOptions(tenantId: string): Promise<PublicFilterOptions> {
     const [prodsRes, colorsRes, sizesRes] = await Promise.all([
@@ -73,7 +123,7 @@ export const publicCatalogService = {
   },
 
   /**
-   * Obtiene el catalogo de variantes publicas filtrando por Modelo, Talla y Color
+   * Obtiene el catálogo de variantes públicas filtrando por Modelo, Talla y Color
    */
   async getPublicCatalog(
     tenantId: string,
@@ -88,7 +138,15 @@ export const publicCatalogService = {
         cost_price,
         min_stock,
         is_active,
-        productos!inner(id, name, description, is_active, categorias(id, name)),
+        productos!inner(
+          id, 
+          name, 
+          description, 
+          image_url,
+          is_active, 
+          categorias(id, name),
+          imagenes_producto(id, url, sort_order, is_primary)
+        ),
         colores(id, name, hex_code),
         tallas(id, name, sort_order),
         tipos_manga(id, name),
@@ -109,6 +167,13 @@ export const publicCatalogService = {
         0
       );
 
+      const pImages = (v.productos?.imagenes_producto || []).map((img: any) => ({
+        id: img.id,
+        url: img.url,
+        sortOrder: img.sort_order,
+        isPrimary: img.is_primary,
+      }));
+
       return {
         id: v.id,
         tenantId,
@@ -119,6 +184,8 @@ export const publicCatalogService = {
           name: v.productos?.name || "",
           description: v.productos?.description || null,
           categoryId: null,
+          imageUrl: v.productos?.image_url || null,
+          images: pImages,
           category: v.productos?.categorias ? { id: "", tenantId, name: v.productos.categorias.name, isActive: true } : null,
           isActive: true,
           createdAt: "",
@@ -135,7 +202,7 @@ export const publicCatalogService = {
         salePrice: Number(v.sale_price || 0),
         minStock: v.min_stock || 0,
         isActive: v.is_active,
-        images: [],
+        images: pImages,
         totalStock,
       };
     });
@@ -169,5 +236,59 @@ export const publicCatalogService = {
     }
 
     return mapped;
+  },
+
+  /**
+   * Agrupa las variantes por modelo base de guayabera para la vista de tarjetas del catálogo
+   */
+  groupProductsForCatalog(variants: ProductVariant[]): PublicProductView[] {
+    const map = new Map<string, PublicProductView>();
+
+    variants.forEach((v) => {
+      if (!v.product) return;
+      const pId = v.productId;
+
+      if (!map.has(pId)) {
+        map.set(pId, {
+          productId: pId,
+          name: v.product.name,
+          description: v.product.description,
+          categoryName: v.product.category?.name || "Guayaberas",
+          imageUrl: v.product.imageUrl || v.product.images?.[0]?.url || null,
+          images: v.product.images || [],
+          minPrice: v.salePrice,
+          maxPrice: v.salePrice,
+          availableColors: [],
+          availableSizes: [],
+          totalStock: 0,
+          variants: [],
+        });
+      }
+
+      const entry = map.get(pId)!;
+      entry.minPrice = Math.min(entry.minPrice, v.salePrice);
+      entry.maxPrice = Math.max(entry.maxPrice, v.salePrice);
+      entry.totalStock += v.totalStock || 0;
+
+      if (v.color?.name && !entry.availableColors.includes(v.color.name)) {
+        entry.availableColors.push(v.color.name);
+      }
+
+      if (v.size?.name && !entry.availableSizes.includes(v.size.name)) {
+        entry.availableSizes.push(v.size.name);
+      }
+
+      entry.variants.push({
+        variantId: v.id,
+        sku: v.sku,
+        colorName: v.color?.name || null,
+        sizeName: v.size?.name || null,
+        sleeveTypeName: v.sleeveType?.name || null,
+        salePrice: v.salePrice,
+        stock: v.totalStock || 0,
+      });
+    });
+
+    return Array.from(map.values());
   },
 };

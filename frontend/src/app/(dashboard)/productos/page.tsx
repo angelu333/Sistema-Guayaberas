@@ -1,13 +1,26 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, Button, Input, Badge } from "@/components/ui";
 import { ProductModal } from "@/components/productos/ProductModal";
+import { EditProductModal } from "@/components/productos/EditProductModal";
 import { productsService } from "@/services/products.service";
-import { ProductVariant, Category } from "@/types/domain.types";
+import { ProductVariant, Category, Product } from "@/types/domain.types";
 import { formatCurrency } from "@/lib/utils/formatters";
-import { Plus, Search, Filter, Package, Tag, CheckCircle, XCircle } from "lucide-react";
+import {
+  Plus,
+  Search,
+  Filter,
+  Package,
+  Tag,
+  CheckCircle,
+  XCircle,
+  Image as ImageIcon,
+  Shirt,
+  Edit,
+  Trash2,
+} from "lucide-react";
 
 export default function ProductsPage() {
   const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -17,6 +30,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showModal, setShowModal] = useState(false);
+  const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
 
   useEffect(() => {
     loadProducts();
@@ -56,6 +70,19 @@ export default function ProductsPage() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string, productName: string) => {
+    if (!confirm(`¿Estás seguro de que deseas ELIMINAR el modelo "${productName}"?\n\nEsta acción eliminará el producto base, sus fotografías y todas sus variantes de tallas/colores de forma permanente.`)) {
+      return;
+    }
+
+    try {
+      await productsService.deleteProduct(productId);
+      loadProducts();
+    } catch (err: any) {
+      alert(err.message || "Error al eliminar el producto.");
+    }
+  };
+
   const filteredVariants = variants.filter((v) => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -71,7 +98,7 @@ export default function ProductsPage() {
     <div className="flex flex-col min-h-screen">
       <Header
         title="Catálogo de Productos y Variantes"
-        subtitle="Administre los modelos de guayaberas, combinaciones, precios y SKUs"
+        subtitle="Administre los modelos de guayaberas, fotografías, combinaciones, precios y SKUs"
       />
 
       <div className="page-container space-y-6">
@@ -147,6 +174,7 @@ export default function ProductsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#F8F6F1] border-b border-[#DDD9D0] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
+                    <th className="p-4">Foto</th>
                     <th className="p-4">SKU</th>
                     <th className="p-4">Modelo / Guayabera</th>
                     <th className="p-4">Color</th>
@@ -160,6 +188,25 @@ export default function ProductsPage() {
                 <tbody className="divide-y divide-[#DDD9D0] text-xs text-[#26302B]">
                   {filteredVariants.map((v) => (
                     <tr key={v.id} className="hover:bg-[#F8F6F1]/60 transition-colors">
+                      {/* Miniatura de Foto de Guayabera */}
+                      <td className="p-4 w-14">
+                        <div
+                          onClick={() => v.product && setSelectedProductForEdit(v.product)}
+                          className="w-11 h-11 rounded-xl overflow-hidden bg-[#F8F6F1] border border-[#DDD9D0] flex items-center justify-center cursor-pointer hover:ring-2 hover:ring-[#556B5D]/40 transition-all group"
+                          title="Haga clic para editar fotos del modelo"
+                        >
+                          {v.product?.imageUrl ? (
+                            <img
+                              src={v.product.imageUrl}
+                              alt={v.product.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <Shirt className="w-5 h-5 text-[#8FA393] group-hover:text-[#556B5D]" />
+                          )}
+                        </div>
+                      </td>
+
                       <td className="p-4 font-mono font-semibold text-[#556B5D]">
                         {v.sku}
                       </td>
@@ -210,28 +257,45 @@ export default function ProductsPage() {
                         )}
                       </td>
                       <td className="p-4 text-right">
-                        <button
-                          onClick={() => handleToggleStatus(v.id, v.isActive)}
-                          className={[
-                            "p-1.5 rounded-md text-xs font-medium transition-colors inline-flex items-center gap-1",
-                            v.isActive
-                              ? "text-[#B85450] hover:bg-[#FAEAEA]"
-                              : "text-[#3F7D58] hover:bg-[#EBF5F0]",
-                          ].join(" ")}
-                          title={v.isActive ? "Desactivar variante" : "Reactivar variante"}
-                        >
-                          {v.isActive ? (
-                            <>
-                              <XCircle className="w-4 h-4" />
-                              <span>Desactivar</span>
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="w-4 h-4" />
-                              <span>Activar</span>
-                            </>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {v.product && (
+                            <button
+                              onClick={() => setSelectedProductForEdit(v.product)}
+                              className="p-1.5 rounded-lg text-xs font-semibold text-[#556B5D] hover:bg-[#EBF0EC] transition-colors inline-flex items-center gap-1"
+                              title="Editar fotos y detalles del modelo"
+                            >
+                              <ImageIcon className="w-4 h-4" />
+                              <span className="hidden sm:inline">Fotos</span>
+                            </button>
                           )}
-                        </button>
+
+                          <button
+                            onClick={() => handleToggleStatus(v.id, v.isActive)}
+                            className={[
+                              "p-1.5 rounded-lg text-xs font-medium transition-colors inline-flex items-center gap-1",
+                              v.isActive
+                                ? "text-[#B85450] hover:bg-[#FAEAEA]"
+                                : "text-[#3F7D58] hover:bg-[#EBF5F0]",
+                            ].join(" ")}
+                            title={v.isActive ? "Desactivar variante" : "Reactivar variante"}
+                          >
+                            {v.isActive ? (
+                              <XCircle className="w-4 h-4" />
+                            ) : (
+                              <CheckCircle className="w-4 h-4" />
+                            )}
+                          </button>
+
+                          {v.product && (
+                            <button
+                              onClick={() => handleDeleteProduct(v.product!.id, v.product!.name)}
+                              className="p-1.5 rounded-lg text-xs font-medium text-[#B85450] hover:bg-[#FAEAEA] transition-colors inline-flex items-center gap-1"
+                              title="Eliminar modelo y todas sus variantes de forma permanente"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -246,6 +310,17 @@ export default function ProductsPage() {
       <ProductModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
+        onSuccess={() => {
+          loadProducts();
+        }}
+      />
+
+      {/* Modal de Edicion de Fotos y Producto */}
+      <EditProductModal
+        isOpen={!!selectedProductForEdit}
+        onClose={() => setSelectedProductForEdit(null)}
+        product={selectedProductForEdit}
+        categories={categories}
         onSuccess={() => {
           loadProducts();
         }}

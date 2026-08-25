@@ -482,4 +482,85 @@ export const quotesService = {
 
     return { success: true };
   },
+
+  /**
+   * Convierte una cotización en una venta oficial completa:
+   * 1. Registra la venta con número de ticket.
+   * 2. Descuenta el inventario físico mediante movimientos_inventario (tipo VENTA).
+   * 3. Registra en el Historial de Ventas y suma a las métricas del Dashboard.
+   * 4. Actualiza el estado de la cotización a 'converted'.
+   */
+  async convertQuoteToSale(
+    quoteId: string,
+    sellerId?: string
+  ): Promise<{ success: boolean; ticketNumber?: string; error?: string }> {
+    const quote = await this.getQuoteById(quoteId);
+    if (!quote) return { success: false, error: "Cotización no encontrada." };
+    if (quote.status === "converted") {
+      return { success: false, error: "Esta cotización ya fue convertida a venta previamente." };
+    }
+
+    const { salesService } = await import("./sales.service");
+
+    const items = quote.details.map((d) => ({
+      variantId: d.variantId,
+      variant: {
+        id: d.variantId,
+        tenantId: quote.tenantId,
+        productId: "",
+        colorId: null,
+        sizeId: null,
+        sleeveTypeId: null,
+        sku: d.sku,
+        costPrice: 0,
+        salePrice: d.finalUnitPrice,
+        minStock: 0,
+        isActive: true,
+        images: [],
+        product: {
+          id: "",
+          tenantId: quote.tenantId,
+          name: d.productName,
+          description: null,
+          categoryId: null,
+          category: null,
+          isActive: true,
+          createdAt: "",
+          updatedAt: "",
+        },
+        color: d.colorName ? { id: "", tenantId: quote.tenantId, name: d.colorName, hexCode: null, isActive: true } : null,
+        size: d.sizeName ? { id: "", tenantId: quote.tenantId, name: d.sizeName, sortOrder: 0, isActive: true } : null,
+        sleeveType: null,
+      },
+      quantity: d.quantity,
+      unitPrice: d.finalUnitPrice,
+      discountPercent: 0,
+    }));
+
+    const saleResult = await salesService.completeSale({
+      tenantId: quote.tenantId,
+      sellerId: sellerId || "",
+      clientId: quote.clientId,
+      items,
+      globalDiscountPercent: 0,
+      notes: `Venta registrada desde Cotización #${quote.quoteNumber}`,
+      payments: [
+        {
+          method: "cash",
+          amount: quote.totalAmount,
+        },
+      ],
+    });
+
+    if (!saleResult.success) {
+      return { success: false, error: saleResult.error };
+    }
+
+    await this.updateQuoteStatus(quoteId, "converted");
+
+    return {
+      success: true,
+      ticketNumber: saleResult.ticketNumber,
+    };
+  },
 };

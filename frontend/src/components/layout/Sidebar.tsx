@@ -14,7 +14,6 @@ import {
   Settings,
   ShieldCheck,
   Share2,
-  ShoppingBag,
   Layers,
   FileText,
   X,
@@ -71,12 +70,6 @@ const navItems: NavItem[] = [
     href: "/produccion",
     icon: <Factory className="w-4 h-4" />,
     roles: ["admin", "production"],
-  },
-  {
-    label: "Compras",
-    href: "/compras",
-    icon: <ShoppingBag className="w-4 h-4" />,
-    roles: ["admin"],
   },
   {
     label: "Materias Primas",
@@ -136,12 +129,20 @@ export function Sidebar({ isMobileOpen = false, onCloseMobile }: SidebarProps) {
       <div>
         <div className="p-5 border-b border-[#38463F] flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-[#556B5D] flex items-center justify-center text-white font-bold font-[Outfit] text-lg shadow-sm shrink-0">
-              G
+            <div className="w-10 h-10 rounded-xl bg-[#556B5D] flex items-center justify-center text-white font-bold font-[Outfit] text-lg shadow-sm shrink-0 overflow-hidden p-1 border border-[#38463F]">
+              {tenant?.logoUrl ? (
+                <img
+                  src={tenant.logoUrl}
+                  alt={tenant.name}
+                  className="max-w-full max-h-full object-contain"
+                />
+              ) : (
+                <span>{tenant?.name?.slice(0, 1).toUpperCase() || session?.companyName?.slice(0, 1).toUpperCase() || "G"}</span>
+              )}
             </div>
             <div className="min-w-0">
               <h1 className="font-[Outfit] font-bold text-base text-white truncate tracking-tight">
-                {session?.companyName || "Guayabera Manager"}
+                {tenant?.name || session?.companyName || "Guayabera Manager"}
               </h1>
               <span className="block text-xs text-[#8FA393] truncate font-medium">
                 Plataforma de Gestión

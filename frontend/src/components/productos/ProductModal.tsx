@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState, useEffect } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
@@ -10,6 +10,7 @@ import {
 } from "@/services/products.service";
 import { Category, Color, Size, SleeveType } from "@/types/domain.types";
 import { useAuthStore } from "@/stores/auth.store";
+import { ImageGalleryUploader, type UploadedImage } from "@/components/productos/ImageGalleryUploader";
 
 interface ProductModalProps {
   isOpen: boolean;
@@ -28,6 +29,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   const [productName, setProductName] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [images, setImages] = useState<UploadedImage[]>([]);
 
   const [variants, setVariants] = useState<CreateVariantDTO[]>([
     {
@@ -47,6 +49,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   useEffect(() => {
     if (isOpen) {
       loadCatalogData();
+      setImages([]);
     }
   }, [isOpen]);
 
@@ -64,7 +67,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
       setSizes(szs);
       setSleeveTypes(slvs);
     } catch (err) {
-      console.error("Error al cargar datos auxiliares", err);
+      console.error("Error al cargar catalogos auxiliares:", err);
     }
   };
 
@@ -221,6 +224,11 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
               value={description}
               onChange={(e) => setDescription(e.target.value)}
             />
+          </div>
+
+          {/* Galería de Fotografías del Modelo */}
+          <div className="pt-2 border-t border-[#DDD9D0]">
+            <ImageGalleryUploader images={images} onChange={setImages} maxImages={5} />
           </div>
 
           {/* Variantes del Producto */}

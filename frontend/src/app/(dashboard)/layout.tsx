@@ -39,7 +39,7 @@ export default function DashboardLayout({
             phone: null,
             email: currentSession.email,
             address: null,
-            logoUrl: null,
+            logoUrl: currentSession.logoUrl || null,
             whatsapp: null,
             isActive: true,
             createdAt: "",

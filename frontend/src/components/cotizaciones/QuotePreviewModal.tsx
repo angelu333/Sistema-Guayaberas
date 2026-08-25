@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { X, Printer, Share2, FileText, CheckCircle2, ShieldCheck } from "lucide-react";
+import { X, Printer, Share2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { QuoteRecord } from "@/services/quotes.service";
 
@@ -35,8 +35,8 @@ export function QuotePreviewModal({
   ).toLocaleDateString("es-MX");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in print:p-0 print:bg-white print:static">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#DDD9D0] overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none print:w-full">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in print:fixed print:inset-0 print:z-[99999] print:bg-white print:p-0 print:block">
+      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-[#DDD9D0] overflow-hidden flex flex-col max-h-[92vh] print:max-h-none print:shadow-none print:border-none print:w-full print:rounded-none">
         {/* Modal Header (Oculto al imprimir) */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#DDD9D0] bg-[#F8F6F1] print:hidden">
           <div className="flex items-center gap-2">
@@ -67,10 +67,10 @@ export function QuotePreviewModal({
           </div>
         </div>
 
-        {/* Printable Document Area con clase printable-document */}
+        {/* Printable Document Area */}
         <div
           ref={printableRef}
-          className="printable-document flex-1 overflow-y-auto p-8 space-y-6 text-xs text-[#26302B] bg-white print:overflow-visible print:p-4"
+          className="flex-1 overflow-y-auto p-8 space-y-6 text-xs text-[#26302B] bg-white print:overflow-visible print:p-4 print:block"
         >
           {/* Header de la Empresa con Logo Elegante */}
           <div className="flex justify-between items-start border-b-2 border-[#556B5D] pb-6">
@@ -114,7 +114,7 @@ export function QuotePreviewModal({
           </div>
 
           {/* Datos del Cliente y Resumen */}
-          <div className="p-4 bg-[#F8F6F1] rounded-2xl border border-[#DDD9D0] grid grid-cols-2 gap-4">
+          <div className="p-4 bg-[#F8F6F1] rounded-2xl border border-[#DDD9D0] flex justify-between items-start gap-4">
             <div>
               <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7A71]">
                 Cliente / Empresa Atendida
