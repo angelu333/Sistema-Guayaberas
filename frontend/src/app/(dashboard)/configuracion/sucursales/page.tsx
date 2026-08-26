@@ -3,11 +3,11 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function InsumosRedirectPage() {
+export default function SucursalesConfigRedirectPage() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace("/produccion?tab=insumos");
+    router.replace("/sucursales");
   }, [router]);
 
   return (

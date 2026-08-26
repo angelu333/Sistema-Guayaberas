@@ -11,6 +11,8 @@ export interface CompleteSaleParams {
   clientId?: string | null;
   globalDiscountPercent?: number;
   notes?: string;
+  /** ID de la sucursal/ubicación donde se realiza la venta */
+  locationId?: string | null;
 }
 
 export interface SaleRecord {
@@ -69,6 +71,7 @@ export const salesService = {
       clientId = null,
       globalDiscountPercent = 0,
       notes = "",
+      locationId = null,
     } = params;
 
     // Calcular totales
@@ -93,7 +96,7 @@ export const salesService = {
 
     const ticketNumber = ticketData as string;
 
-    // 2. Insertar venta principal
+    // 2. Insertar venta principal (con sucursal activa si se provee)
     const { data: sale, error: saleError } = await supabase
       .from("ventas")
       .insert({
@@ -101,6 +104,7 @@ export const salesService = {
         ticket_number: ticketNumber,
         client_id: clientId || null,
         seller_id: sellerId,
+        location_id: locationId || null,
         subtotal,
         discount_amount: discountAmount,
         total,
@@ -156,22 +160,25 @@ export const salesService = {
     }
 
     // 5. Registrar movimiento de inventario VENTA por cada item
-    // Buscar la ubicacion principal del tenant para descontar stock
-    const { data: ubicaciones } = await supabase
-      .from("ubicaciones")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_active", true)
-      .order("created_at")
-      .limit(1);
+    // Usar la sucursal activa si se provee, si no buscar la primera del tenant
+    let resolvedLocationId = locationId || null;
 
-    const defaultLocationId = ubicaciones?.[0]?.id || null;
+    if (!resolvedLocationId) {
+      const { data: ubicaciones } = await supabase
+        .from("ubicaciones")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("created_at")
+        .limit(1);
+      resolvedLocationId = ubicaciones?.[0]?.id || null;
+    }
 
-    if (defaultLocationId) {
+    if (resolvedLocationId) {
       const movimientoRows = items.map((item) => ({
         tenant_id: tenantId,
         variant_id: item.variantId,
-        location_id: defaultLocationId,
+        location_id: resolvedLocationId,
         type: "VENTA",
         quantity: item.quantity,
         reason: `Venta ${ticketNumber}`,

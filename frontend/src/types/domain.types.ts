@@ -130,6 +130,7 @@ export interface Location {
   name: string;
   description: string | null;
   isActive: boolean;
+  createdAt?: string;
 }
 
 export interface Stock {
