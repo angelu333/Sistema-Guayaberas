@@ -15,7 +15,7 @@ Este documento resume de forma comprimida y estructurada **todo lo hablado, dise
 - **Backend / BD**: Supabase (PostgreSQL) con RLS (Row Level Security) multi-tenant y triggers automáticos.
 - **Entorno Local**:
   - Servidor de desarrollo: `http://localhost:3005` (puerto 3005).
-  - Repositorio Git: `https://github.com/angelu333/Sistema-Guayaberas.git` (último commit pushed: `2aff573`).
+  - Repositorio Git: `https://github.com/angelu333/Sistema-Guayaberas.git` (último commit pushed: `74299d8`).
   - Usuario de prueba: `admintest@gmail.com` / Contraseña: `123456` (Tenant ID: `d028fc2c-89c7-4cc9-89c5-3978d40a6dfb`).
 
 ---
@@ -96,4 +96,4 @@ Este documento resume de forma comprimida y estructurada **todo lo hablado, dise
 ## 📋 5. Instrucciones para la Siguiente Sesión Chat
 Cuando inicies un nuevo chat, simplemente puedes pegar este mensaje de bienvenida:
 
-> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `2aff573`). ¿Podemos continuar con el siguiente paso?"*
+> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `74299d8`). ¿Podemos continuar con el siguiente paso?"*
