@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sin conexión — Guayabera Manager</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #26302B;
+      color: #E7E3DA;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .container {
+      padding: 2rem;
+      max-width: 400px;
+    }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      color: #fff;
+    }
+    p {
+      font-size: 0.9rem;
+      color: #8FA393;
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+    button {
+      background: #556B5D;
+      color: #fff;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 12px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover { background: #44564A; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon">📡</div>
+    <h1>Sin conexión a internet</h1>
+    <p>
+      No puedes usar Guayabera Manager sin conexión.<br />
+      Revisa tu conexión a internet e intenta de nuevo.
+    </p>
+    <button onclick="window.location.reload()">
+      🔄 Volver a intentar
+    </button>
+  </div>
+</body>
+</html>

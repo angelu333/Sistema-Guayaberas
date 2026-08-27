@@ -15,6 +15,7 @@ import {
   FileText,
   Shield,
   Sparkles,
+  Bell,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Card, Button, Input } from "@/components/ui";
@@ -22,8 +23,9 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useTenantStore } from "@/stores/tenant.store";
 import { settingsService, type UpdateTenantDTO } from "@/services/settings.service";
 import { BrandLogoUploader } from "@/components/configuracion/BrandLogoUploader";
+import { NotificationsSettings } from "@/components/configuracion/NotificationsSettings";
 
-type SettingsTab = "company" | "profile";
+type SettingsTab = "company" | "profile" | "notifications";
 
 export default function SettingsPage() {
   const { session, setSession } = useAuthStore();
@@ -237,6 +239,18 @@ export default function SettingsPage() {
           >
             <User className="w-4 h-4" />
             Mi Perfil y Seguridad
+          </button>
+
+          <button
+            onClick={() => setActiveTab("notifications")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeTab === "notifications"
+                ? "bg-[#556B5D] text-white shadow-sm"
+                : "bg-white text-[#6B7A71] hover:text-[#26302B] border border-[#DDD9D0]"
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            Notificaciones Push
           </button>
         </div>
 
@@ -491,6 +505,13 @@ export default function SettingsPage() {
                   </form>
                 </Card>
               </div>
+            )}
+
+            {/* ============================================================
+                PESTAÑA 3: NOTIFICACIONES PUSH
+                ============================================================ */}
+            {activeTab === "notifications" && (
+              <NotificationsSettings />
             )}
           </>
         )}

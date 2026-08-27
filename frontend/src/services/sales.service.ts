@@ -188,8 +188,24 @@ export const salesService = {
       await supabase.from("movimientos_inventario").insert(movimientoRows);
     }
 
+    // 6. Disparar notificación push a los administradores del tenant (fire-and-forget)
+    const totalItems = items.reduce((acc, i) => acc + i.quantity, 0);
+    const totalFormatted = new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(total);
+    fetch("/api/push/send-sale", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tenantId,
+        ticketNumber,
+        total: totalFormatted,
+        totalItems,
+        saleId,
+      }),
+    }).catch(() => {}); // No bloquear si falla el push
+
     return { success: true, saleId, ticketNumber };
   },
+
 
   /**
    * Obtiene el historial de ventas del tenant
