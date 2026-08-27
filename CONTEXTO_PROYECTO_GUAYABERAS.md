@@ -105,5 +105,5 @@ Este documento resume de forma comprimida y estructurada **todo lo hablado, dise
 ## 📋 5. Instrucciones para la Siguiente Sesión Chat
 Cuando inicies un nuevo chat, simplemente puedes pegar este mensaje de bienvenida:
 
-> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `242522d`). ¿Podemos continuar con el siguiente paso?"*
+> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `f368226`). ¿Podemos continuar con el siguiente paso?"*
 
