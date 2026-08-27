@@ -62,7 +62,7 @@ export const publicCatalogService = {
       .eq("is_active", true)
       .maybeSingle();
 
-    // 2. Si no encuentra por slug exacto, buscar por coincidencia en nombre o primer tenant activo
+    // 2. Si no encuentra por slug exacto, buscar por coincidencia en nombre
     if (!data) {
       const cleanSlug = slug.replace(/-/g, " ");
       const { data: fallbackData } = await supabase
@@ -106,20 +106,68 @@ export const publicCatalogService = {
   },
 
   /**
-   * Obtiene las opciones disponibles de Modelo, Talla y Color para poblar los filtros
+   * Obtiene TODAS las opciones de Modelo, Talla y Color que existen en la BD
+   * (incluyendo las globales y las asociadas a variantes del tenant)
    */
   async getPublicFilterOptions(tenantId: string): Promise<PublicFilterOptions> {
-    const [prodsRes, colorsRes, sizesRes] = await Promise.all([
-      supabase.from("productos").select("id, name").eq("tenant_id", tenantId).eq("is_active", true).order("name"),
-      supabase.from("colores").select("id, name, hex_code").eq("tenant_id", tenantId).eq("is_active", true).order("name"),
-      supabase.from("tallas").select("id, name, sort_order").eq("tenant_id", tenantId).eq("is_active", true).order("sort_order"),
+    // Cargar productos del tenant, todas las tallas (globales y de tenant) y todos los colores
+    const [prodsRes, colorsRes, sizesRes, variantsRes] = await Promise.all([
+      supabase
+        .from("productos")
+        .select("id, name")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("colores")
+        .select("id, name, hex_code")
+        .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
+        .from("tallas")
+        .select("id, name, sort_order")
+        .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+        .eq("is_active", true)
+        .order("sort_order"),
+      supabase
+        .from("variantes_producto")
+        .select(`
+          productos(id, name),
+          colores(id, name, hex_code),
+          tallas(id, name, sort_order)
+        `)
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true),
     ]);
 
-    return {
-      modelos: (prodsRes.data || []).map((p: any) => ({ id: p.id, name: p.name })),
-      colores: (colorsRes.data || []).map((c: any) => ({ id: c.id, name: c.name, hexCode: c.hex_code })),
-      tallas: (sizesRes.data || []).map((s: any) => ({ id: s.id, name: s.name, sortOrder: s.sort_order })),
-    };
+    const modelosMap = new Map<string, { id: string; name: string }>();
+    (prodsRes.data || []).forEach((p: any) => modelosMap.set(p.id, { id: p.id, name: p.name }));
+
+    const coloresMap = new Map<string, { id: string; name: string; hexCode: string | null }>();
+    (colorsRes.data || []).forEach((c: any) => coloresMap.set(c.id, { id: c.id, name: c.name, hexCode: c.hex_code }));
+
+    const tallasMap = new Map<string, { id: string; name: string; sortOrder: number }>();
+    (sizesRes.data || []).forEach((s: any) => tallasMap.set(s.id, { id: s.id, name: s.name, sortOrder: s.sort_order || 0 }));
+
+    // Consolidar también todo lo que venga en las variantes del tenant
+    (variantsRes.data || []).forEach((v: any) => {
+      if (v.productos?.id && v.productos?.name) {
+        modelosMap.set(v.productos.id, { id: v.productos.id, name: v.productos.name });
+      }
+      if (v.colores?.id && v.colores?.name) {
+        coloresMap.set(v.colores.id, { id: v.colores.id, name: v.colores.name, hexCode: v.colores.hex_code || null });
+      }
+      if (v.tallas?.id && v.tallas?.name) {
+        tallasMap.set(v.tallas.id, { id: v.tallas.id, name: v.tallas.name, sortOrder: v.tallas.sort_order || 0 });
+      }
+    });
+
+    const modelos = Array.from(modelosMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const colores = Array.from(coloresMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const tallas = Array.from(tallasMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+
+    return { modelos, colores, tallas };
   },
 
   /**

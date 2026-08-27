@@ -1,8 +1,24 @@
-﻿// Utilidad para actualizar la sesion en el middleware de Next.js
+// Utilidad para actualizar la sesion en el middleware de Next.js
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+
+  // 1. Rutas 100% públicas que NO deben esperar llamadas de red de autenticación
+  const isPublicRoute =
+    pathname.startsWith("/catalogo") ||
+    pathname.startsWith("/cotizacion") ||
+    pathname.startsWith("/api/push") ||
+    pathname.startsWith("/offline.html") ||
+    pathname === "/manifest.json" ||
+    pathname === "/sw.js";
+
+  if (isPublicRoute) {
+    return NextResponse.next({ request });
+  }
+
+  // 2. Para las demás rutas (Dashboard, POS, Inventario, etc.), verificar sesión con Supabase
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -26,22 +42,21 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+
   // Refrescar la sesion del usuario
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Si no hay sesion y la ruta requiere autenticacion, redirigir al login
-  const isAuthRoute = request.nextUrl.pathname.startsWith("/login") ||
-                      request.nextUrl.pathname.startsWith("/register");
-  const isPublicRoute = request.nextUrl.pathname.startsWith("/catalogo");
-
-  if (!user && !isAuthRoute && !isPublicRoute) {
+  // Si no hay sesion y la ruta no es de auth, redirigir al login
+  if (!user && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
+  // Si hay sesion y esta en el login, redirigir al dashboard
   if (user && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";

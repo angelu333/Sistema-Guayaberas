@@ -3,7 +3,7 @@
 // Envía una notificación push de prueba al usuario autenticado
 // ================================================================
 import { NextRequest, NextResponse } from "next/server";
-import { sendPushToTenant } from "../send/route";
+import { sendPushToTenant } from "@/lib/push/send-push";
 
 export async function POST(req: NextRequest) {
   try {

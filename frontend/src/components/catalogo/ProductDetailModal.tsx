@@ -5,15 +5,19 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  ShoppingBag,
-  Check,
-  Sparkles,
-  Shirt,
+  MessageCircle,
   ShieldCheck,
+  Truck,
+  Scissors,
+  Ruler,
+  Shirt,
+  Plus,
+  Minus,
+  ShoppingBag,
+  CheckCircle,
 } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import type { PublicProductView } from "@/services/public-catalog.service";
+import type { PublicCartItem } from "@/components/catalogo/PublicCartDrawer";
 
 interface ProductDetailModalProps {
   isOpen: boolean;
@@ -21,28 +25,29 @@ interface ProductDetailModalProps {
   product: PublicProductView | null;
   tenantName?: string;
   tenantWhatsapp?: string | null;
+  onAddToCart?: (item: PublicCartItem) => void;
 }
 
 export function ProductDetailModal({
   isOpen,
   onClose,
   product,
-  tenantName = "Guayabera Manager",
+  tenantName = "Guayaberas Ábito & Montejo",
   tenantWhatsapp,
+  onAddToCart,
 }: ProductDetailModalProps) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
+  const [showSizeGuide, setShowSizeGuide] = useState(false);
+  const [addedSuccess, setAddedSuccess] = useState(false);
 
-  // Reiniciar selección al abrir modal con un nuevo producto
   useEffect(() => {
     if (isOpen && product) {
       setActiveImageIndex(0);
       const firstColor = product.availableColors[0] || "";
       setSelectedColor(firstColor);
-
-      // Calcular tallas para el primer color
       const sizesForFirstColor = product.variants
         .filter((v) => !firstColor || v.colorName === firstColor)
         .map((v) => v.sizeName)
@@ -50,12 +55,22 @@ export function ProductDetailModal({
       const uniqueSizes = Array.from(new Set(sizesForFirstColor));
       setSelectedSize(uniqueSizes[0] || "");
       setQuantity(1);
+      setShowSizeGuide(false);
+      setAddedSuccess(false);
     }
   }, [isOpen, product]);
 
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isOpen]);
+
   if (!isOpen || !product) return null;
 
-  // Lista de imágenes para el carrusel (galería o imagen principal)
   const images =
     product.images && product.images.length > 0
       ? product.images.map((img) => img.url)
@@ -65,31 +80,25 @@ export function ProductDetailModal({
 
   const currentColor = selectedColor || product.availableColors[0] || "";
 
-  // TALLAS DINÁMICAS Y REACTIVAS DEPENDIENTES DEL COLOR SELECCIONADO
   const sizesForCurrentColor = product.variants
     .filter((v) => !currentColor || v.colorName === currentColor)
     .map((v) => v.sizeName)
     .filter(Boolean) as string[];
   const availableSizes = Array.from(new Set(sizesForCurrentColor));
 
-  // Talla activa actual (si la seleccionada no existe en este color, usar la primera disponible)
   const currentSize =
     selectedSize && availableSizes.includes(selectedSize)
       ? selectedSize
       : availableSizes[0] || "";
 
-  // Encontrar variante específica para calcular stock y precio exacto
   const matchingVariant = product.variants.find(
-    (v) =>
-      (!currentColor || v.colorName === currentColor) &&
-      (!currentSize || v.sizeName === currentSize)
+    (v) => (!currentColor || v.colorName === currentColor) && (!currentSize || v.sizeName === currentSize)
   );
 
   const finalPrice = matchingVariant ? matchingVariant.salePrice : product.minPrice;
   const currentStock = matchingVariant ? matchingVariant.stock : 0;
   const isOutOfStock = matchingVariant ? matchingVariant.stock <= 0 : false;
 
-  // Al cambiar de color, actualizar color y validar talla
   const handleColorChange = (newColor: string) => {
     setSelectedColor(newColor);
     const validSizes = product.variants
@@ -97,12 +106,9 @@ export function ProductDetailModal({
       .map((v) => v.sizeName)
       .filter(Boolean) as string[];
     const unique = Array.from(new Set(validSizes));
-    if (!unique.includes(selectedSize)) {
-      setSelectedSize(unique[0] || "");
-    }
+    if (!unique.includes(selectedSize)) setSelectedSize(unique[0] || "");
   };
 
-  // Navegación del carrusel
   const handlePrevImage = () => {
     if (images.length <= 1) return;
     setActiveImageIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
@@ -113,17 +119,42 @@ export function ProductDetailModal({
     setActiveImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
-  // Enviar pedido a WhatsApp
-  const handleSendWhatsApp = () => {
-    const phone = tenantWhatsapp || "529991234567";
-    const totalAmount = (finalPrice * quantity).toFixed(2);
-    const message = `¡Hola ${tenantName}! Me interesa adquirir la *${product.name}*:
-- Color: *${currentColor || "Estándar"}*
-- Talla: *${currentSize || "Estándar"}*
-- Cantidad: *${quantity} pieza${quantity > 1 ? "s" : ""}*
-- Total estimado: *$${totalAmount} MXN*
+  const handleAddToCartClick = () => {
+    if (!onAddToCart || isOutOfStock) return;
+    const cartItem: PublicCartItem = {
+      cartItemId: `${product.productId}-${currentColor}-${currentSize}`,
+      productId: product.productId,
+      variantId: matchingVariant?.variantId || product.productId,
+      productName: product.name,
+      colorName: currentColor,
+      sizeName: currentSize,
+      unitPrice: finalPrice,
+      quantity: quantity,
+      imageUrl: images[0] || product.imageUrl || null,
+    };
+    onAddToCart(cartItem);
+    setAddedSuccess(true);
+    setTimeout(() => {
+      setAddedSuccess(false);
+      onClose();
+    }, 1200);
+  };
 
-¿Tienen disponibilidad para entrega o envío?`;
+  const handleSendWhatsApp = () => {
+    const phone = tenantWhatsapp || "";
+    if (!phone) {
+      alert("No hay número de WhatsApp registrado.");
+      return;
+    }
+    const totalAmount = (finalPrice * quantity).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+    const message =
+      `¡Hola ${tenantName}! Me interesa adquirir lo siguiente:\n\n` +
+      `Guayabera: ${product.name}\n` +
+      `Color: ${currentColor || "Estándar"}\n` +
+      `Talla: ${currentSize || "Estándar"}\n` +
+      `Cantidad: ${quantity} pieza${quantity > 1 ? "s" : ""}\n` +
+      `Total estimado: ${totalAmount} MXN\n\n` +
+      `¿Tienen disponibilidad? ¿Hacen envíos?`;
 
     window.open(
       `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
@@ -132,217 +163,342 @@ export function ProductDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
-      <div className="w-full max-w-3xl bg-white rounded-3xl shadow-2xl border border-[#DDD9D0] overflow-hidden flex flex-col md:flex-row max-h-[90vh]">
-        {/* Lado Izquierdo: Carrusel de Fotos Interactivo */}
-        <div className="w-full md:w-1/2 bg-[#F8F6F1] flex flex-col justify-between p-4 border-b md:border-b-0 md:border-r border-[#DDD9D0]">
-          {/* Contenedor de Foto Grande */}
-          <div className="relative aspect-square rounded-2xl overflow-hidden bg-white border border-[#DDD9D0] shadow-xs group">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 font-[Outfit]"
+      style={{ backgroundColor: "rgba(38,48,43,0.75)", backdropFilter: "blur(6px)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div
+        className="w-full max-w-3xl rounded-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] relative bg-white"
+        style={{ boxShadow: "0 25px 60px rgba(38,48,43,0.35)" }}
+      >
+        {/* LADO IZQUIERDO: Galería de Fotos */}
+        <div
+          className="w-full md:w-[45%] flex flex-col shrink-0"
+          style={{ backgroundColor: "#F5EFE3" }}
+        >
+          {/* Foto principal */}
+          <div className="relative flex-1 min-h-[220px] sm:min-h-[320px] overflow-hidden" style={{ aspectRatio: "3/4" }}>
             {images.length > 0 ? (
               <img
                 src={images[activeImageIndex]}
                 alt={product.name}
-                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center text-[#8FA393] gap-2">
-                <Shirt className="w-16 h-16 stroke-1" />
-                <span className="text-xs">Sin fotografía</span>
+              <div
+                className="w-full h-full flex flex-col items-center justify-center gap-3"
+                style={{ color: "#C49A5A" }}
+              >
+                <Shirt className="w-20 h-20 stroke-1" />
+                <span className="text-xs font-medium" style={{ color: "#8B7D6B" }}>Sin fotografía</span>
               </div>
             )}
 
-            {/* Flechas de Navegación del Carrusel */}
+            {/* Flechas de navegación */}
             {images.length > 1 && (
               <>
                 <button
-                  type="button"
                   onClick={handlePrevImage}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-[#26302B] shadow-md flex items-center justify-center transition-all opacity-80 hover:opacity-100"
-                  title="Foto anterior"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-
                 <button
-                  type="button"
                   onClick={handleNextImage}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-[#26302B] shadow-md flex items-center justify-center transition-all opacity-80 hover:opacity-100"
-                  title="Siguiente foto"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
-
-                {/* Badge de Conteo de Fotos */}
-                <span className="absolute bottom-2 right-2 bg-black/60 text-white text-[10px] font-bold px-2 py-0.5 rounded-md backdrop-blur-xs">
+                <span
+                  className="absolute bottom-3 right-3 text-[10px] font-bold px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "rgba(38,48,43,0.6)", color: "white" }}
+                >
                   {activeImageIndex + 1} / {images.length}
                 </span>
               </>
             )}
           </div>
 
-          {/* Tira de Miniaturas (Thumbnails) */}
+          {/* Miniaturas */}
           {images.length > 1 && (
-            <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1">
+            <div className="flex gap-2 p-3 overflow-x-auto">
               {images.map((img, idx) => (
                 <button
                   key={idx}
-                  type="button"
                   onClick={() => setActiveImageIndex(idx)}
-                  className={`w-12 h-12 rounded-xl overflow-hidden border-2 shrink-0 transition-all ${
-                    activeImageIndex === idx
-                      ? "border-[#556B5D] ring-2 ring-[#556B5D]/30 scale-105"
-                      : "border-[#DDD9D0] opacity-70 hover:opacity-100"
-                  }`}
+                  className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border-2 transition-all"
+                  style={{
+                    borderColor: activeImageIndex === idx ? "#C49A5A" : "#E4DDD1",
+                    opacity: activeImageIndex === idx ? 1 : 0.65,
+                  }}
                 >
-                  <img src={img} alt={`Miniatura ${idx + 1}`} className="w-full h-full object-cover" />
+                  <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
                 </button>
               ))}
             </div>
           )}
         </div>
 
-        {/* Lado Derecho: Detalles de la Guayabera & Selector de Pedido */}
-        <div className="w-full md:w-1/2 p-6 flex flex-col justify-between overflow-y-auto space-y-4">
-          <div>
-            {/* Header / Cerrar */}
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[11px] font-bold uppercase tracking-wider text-[#556B5D] bg-[#EBF0EC] px-2.5 py-0.5 rounded-md">
-                  {product.categoryName || "Guayabera Fina"}
+        {/* LADO DERECHO: Detalle y Pedido */}
+        <div className="flex-1 flex flex-col overflow-y-auto">
+          {/* Header del modal */}
+          <div
+            className="flex items-start justify-between p-5 pb-4 border-b sticky top-0 z-10 bg-white"
+            style={{ borderColor: "#EDE7DA" }}
+          >
+            <div>
+              {product.categoryName && (
+                <span
+                  className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "#EDE7DA", color: "#C49A5A" }}
+                >
+                  {product.categoryName}
                 </span>
-                <h2 className="text-xl font-extrabold text-[#26302B] font-[Outfit] mt-1 tracking-tight">
-                  {product.name}
-                </h2>
-              </div>
-
-              <button
-                onClick={onClose}
-                className="p-1.5 text-[#6B7A71] hover:text-[#26302B] hover:bg-[#F8F6F1] rounded-xl transition-colors"
+              )}
+              <h2
+                className="text-xl font-extrabold tracking-tight mt-1.5"
+                style={{ color: "#26302B" }}
               >
-                <X className="w-5 h-5" />
-              </button>
+                {product.name}
+              </h2>
             </div>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-xl transition-colors shrink-0 ml-2 mt-0.5"
+              style={{ color: "#8B7D6B", backgroundColor: "#F5EFE3" }}
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
+          <div className="p-5 space-y-5 flex-1">
             {/* Precio */}
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-2xl font-extrabold text-[#3F7D58] font-mono">
-                ${finalPrice.toFixed(2)} MXN
+            <div>
+              <span className="text-3xl font-extrabold" style={{ color: "#C49A5A" }}>
+                ${finalPrice.toFixed(2)}
               </span>
+              <span className="text-sm ml-1.5 font-medium" style={{ color: "#8B7D6B" }}>MXN</span>
               {product.maxPrice > product.minPrice && (
-                <span className="text-xs text-[#8FA393]">
-                  (Precios desde ${product.minPrice.toFixed(2)})
-                </span>
+                <p className="text-xs mt-0.5" style={{ color: "#8B7D6B" }}>
+                  Precios desde ${product.minPrice.toFixed(2)} hasta ${product.maxPrice.toFixed(2)} MXN
+                </p>
               )}
             </div>
 
             {/* Descripción */}
             {product.description && (
-              <p className="text-xs text-[#6B7A71] mt-2 leading-relaxed">
+              <p className="text-xs leading-relaxed" style={{ color: "#8B7D6B" }}>
                 {product.description}
               </p>
             )}
 
             {/* Selector de Color */}
             {product.availableColors.length > 0 && (
-              <div className="mt-4 space-y-1.5">
-                <label className="block text-xs font-bold text-[#26302B]">
-                  Color: <span className="font-normal text-[#6B7A71]">{currentColor}</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5">
+              <div>
+                <p className="text-xs font-bold mb-2.5" style={{ color: "#26302B" }}>
+                  Color:{" "}
+                  <span className="font-normal" style={{ color: "#8B7D6B" }}>{currentColor}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
                   {product.availableColors.map((color) => (
                     <button
                       key={color}
-                      type="button"
                       onClick={() => handleColorChange(color)}
-                      className={`px-3 py-1 text-xs font-medium rounded-xl border transition-all ${
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold border-2 transition-all"
+                      style={
                         currentColor === color
-                          ? "bg-[#556B5D] text-white border-[#556B5D] shadow-xs font-bold"
-                          : "bg-[#F8F6F1] text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
-                      }`}
+                          ? { borderColor: "#556B5D", backgroundColor: "#EEF3EE", color: "#26302B" }
+                          : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B" }
+                      }
                     >
                       {color}
+                      {currentColor === color && (
+                        <span
+                          className="w-2 h-2 rounded-full shrink-0"
+                          style={{ backgroundColor: "#556B5D" }}
+                        />
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Selector Reactivo de Tallas (Solo tallas que existen en el color actual) */}
-            <div className="mt-4 space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-[#26302B]">
-                  Talla disponible en {currentColor}:{" "}
-                  <span className="font-normal text-[#556B5D] font-bold">{currentSize}</span>
-                </label>
+            {/* Selector de Talla */}
+            <div>
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-xs font-bold" style={{ color: "#26302B" }}>
+                  Talla:{" "}
+                  <span className="font-normal" style={{ color: "#8B7D6B" }}>{currentSize}</span>
+                </p>
+                <button
+                  onClick={() => setShowSizeGuide(!showSizeGuide)}
+                  className="text-[11px] font-bold underline underline-offset-2"
+                  style={{ color: "#C49A5A" }}
+                >
+                  Guía de Tallas
+                </button>
               </div>
+
               {availableSizes.length === 0 ? (
-                <p className="text-xs text-[#B85450] bg-[#FAEAEA] p-2 rounded-xl border border-[#B85450]/20">
-                  Sin tallas registradas en este color.
+                <p
+                  className="text-xs px-3 py-2 rounded-xl border"
+                  style={{ color: "#B85450", backgroundColor: "#FEF5F5", borderColor: "#F5CACA" }}
+                >
+                  Sin tallas disponibles en este color.
                 </p>
               ) : (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-2">
                   {availableSizes.map((size) => (
                     <button
                       key={size}
-                      type="button"
                       onClick={() => setSelectedSize(size)}
-                      className={`min-w-[42px] h-9 px-2 text-xs font-bold rounded-xl border flex items-center justify-center transition-all ${
+                      className="min-w-[48px] h-11 px-3 text-sm font-extrabold rounded-xl border-2 transition-all"
+                      style={
                         currentSize === size
-                          ? "bg-[#26302B] text-white border-[#26302B] shadow-xs scale-105"
-                          : "bg-[#F8F6F1] text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
-                      }`}
+                          ? { borderColor: "#26302B", backgroundColor: "#26302B", color: "white" }
+                          : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B" }
+                      }
                     >
                       {size}
                     </button>
                   ))}
                 </div>
               )}
+
+              {/* Guía de Tallas Colapsable */}
+              {showSizeGuide && (
+                <div
+                  className="mt-3 p-3 rounded-xl text-xs leading-relaxed border"
+                  style={{ backgroundColor: "#FAF7F2", borderColor: "#E4DDD1", color: "#8B7D6B" }}
+                >
+                  <p className="font-bold mb-1" style={{ color: "#26302B" }}>Guía de Tallas Guayabera</p>
+                  <p>Talla 36 = Pecho 92cm | Talla 38 = Pecho 97cm | Talla 40 = Pecho 102cm</p>
+                  <p>Talla 42 = Pecho 107cm | Talla 44 = Pecho 112cm | Talla 46 = Pecho 117cm</p>
+                  <p className="mt-1 font-medium" style={{ color: "#C49A5A" }}>
+                    ¿Dudas? Contáctanos por WhatsApp para asesoría personalizada.
+                  </p>
+                </div>
+              )}
             </div>
 
-            {/* Estado de Stock en Tiempo Real */}
-            <div className="mt-4 flex items-center gap-2">
-              <ShieldCheck className={`w-4 h-4 ${isOutOfStock ? "text-[#B85450]" : "text-[#3F7D58]"}`} />
-              <span className={`text-xs font-bold ${isOutOfStock ? "text-[#B85450]" : "text-[#3F7D58]"}`}>
+            {/* Disponibilidad */}
+            <div
+              className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
+              style={{
+                backgroundColor: isOutOfStock ? "#FEF5F5" : "#F0F7F3",
+                borderLeft: `3px solid ${isOutOfStock ? "#B85450" : "#3F7D58"}`,
+              }}
+            >
+              <ShieldCheck
+                className="w-4 h-4 shrink-0"
+                style={{ color: isOutOfStock ? "#B85450" : "#3F7D58" }}
+              />
+              <span
+                className="text-xs font-bold"
+                style={{ color: isOutOfStock ? "#B85450" : "#3F7D58" }}
+              >
                 {isOutOfStock
                   ? "Agotado en esta combinación"
-                  : `Disponible en tienda (${currentStock} piezas en existencia)`}
+                  : `Disponible · ${currentStock} pieza${currentStock !== 1 ? "s" : ""} en existencia`}
               </span>
             </div>
           </div>
 
-          {/* Selector de Cantidad y Botón de WhatsApp */}
-          <div className="pt-4 border-t border-[#DDD9D0] space-y-3">
+          {/* Footer del modal: Cantidad + Doble Botón (Agregar al Pedido vs Comprar WhatsApp) */}
+          <div
+            className="p-5 border-t space-y-3 sticky bottom-0 bg-white"
+            style={{ borderColor: "#EDE7DA" }}
+          >
+            {/* Selector de Cantidad */}
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-[#26302B]">Cantidad a pedir:</span>
-              <div className="flex items-center gap-2 bg-[#F8F6F1] p-1 rounded-xl border border-[#DDD9D0]">
+              <span className="text-xs font-bold" style={{ color: "#26302B" }}>Cantidad:</span>
+              <div
+                className="flex items-center gap-1 p-1 rounded-xl"
+                style={{ backgroundColor: "#F5EFE3", border: "1px solid #E4DDD1" }}
+              >
                 <button
-                  type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-7 h-7 rounded-lg bg-white text-[#26302B] font-bold flex items-center justify-center shadow-xs"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors font-bold"
+                  style={{ backgroundColor: "white", color: "#26302B" }}
                 >
-                  -
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span className="font-bold text-xs font-mono px-2 min-w-[24px] text-center">
+                <span
+                  className="w-8 text-center text-sm font-extrabold"
+                  style={{ color: "#26302B" }}
+                >
                   {quantity}
                 </span>
                 <button
-                  type="button"
                   onClick={() => setQuantity((q) => q + 1)}
-                  className="w-7 h-7 rounded-lg bg-[#556B5D] text-white font-bold flex items-center justify-center shadow-xs"
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors font-bold"
+                  style={{ backgroundColor: "#556B5D", color: "white" }}
                 >
-                  +
+                  <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            <Button
-              onClick={handleSendWhatsApp}
-              disabled={isOutOfStock || availableSizes.length === 0}
-              className="w-full bg-[#3F7D58] hover:bg-[#326446] text-white py-2.5 font-bold shadow-md flex items-center justify-center gap-2"
+            {/* Dos Botones de Acción */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Botón 1: Agregar a la Lista / Carrito */}
+              <button
+                onClick={handleAddToCartClick}
+                disabled={isOutOfStock || availableSizes.length === 0 || addedSuccess}
+                className="py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all disabled:opacity-50 border"
+                style={{
+                  backgroundColor: addedSuccess ? "#EBF5F0" : "#F5EFE3",
+                  color: addedSuccess ? "#3F7D58" : "#26302B",
+                  borderColor: addedSuccess ? "#A7D7B9" : "#E4DDD1",
+                }}
+              >
+                {addedSuccess ? (
+                  <>
+                    <CheckCircle className="w-4 h-4 text-[#3F7D58]" />
+                    ¡Agregado al Pedido!
+                  </>
+                ) : (
+                  <>
+                    <ShoppingBag className="w-4 h-4 text-[#C49A5A]" />
+                    Agregar a mi Lista
+                  </>
+                )}
+              </button>
+
+              {/* Botón 2: Comprar 1 Prenda por WhatsApp */}
+              <button
+                onClick={handleSendWhatsApp}
+                disabled={isOutOfStock || availableSizes.length === 0}
+                className="py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-white shadow-sm"
+                style={{ backgroundColor: "#25D366" }}
+              >
+                <MessageCircle className="w-4 h-4" />
+                Pedir 1 Prenda Directo
+              </button>
+            </div>
+
+            {/* Íconos de confianza */}
+            <div
+              className="flex items-center justify-center gap-5 pt-1 text-[11px] font-semibold"
+              style={{ color: "#8B7D6B" }}
             >
-              <ShoppingBag className="w-4 h-4" />
-              Pedir por WhatsApp — ${(finalPrice * quantity).toFixed(2)} MXN
-            </Button>
+              <span className="flex items-center gap-1">
+                <Scissors className="w-3.5 h-3.5 text-[#C49A5A]" />
+                Artesanal
+              </span>
+              <span className="flex items-center gap-1">
+                <Ruler className="w-3.5 h-3.5 text-[#C49A5A]" />
+                Talla exacta
+              </span>
+              <span className="flex items-center gap-1">
+                <Truck className="w-3.5 h-3.5 text-[#C49A5A]" />
+                Envío MX
+              </span>
+            </div>
           </div>
         </div>
       </div>

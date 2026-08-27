@@ -95,24 +95,24 @@ export default function DashboardPage() {
     <div className="flex flex-col min-h-screen pb-8">
       <Header
         title={`Bienvenido, ${session?.fullName || "Administrador"}`}
-        subtitle={`Panel de Inteligencia Operativa • ${session?.companyName || "Empresa"}`}
+        subtitle="Panel de Inteligencia Operativa"
       />
 
       <div className="page-container space-y-6">
-        {/* Banner de Bienvenida y Rol */}
+        {/* Barra de Accesos Rápidos y Rol */}
         <div className="p-4 bg-white rounded-xl border border-[#DDD9D0] shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-[#EBF0EC] text-[#556B5D] rounded-xl">
-              <ShieldCheck className="w-6 h-6" />
+              <ShieldCheck className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-sm font-bold text-[#26302B]">{session?.fullName || "Usuario"}</span>
                 <Badge variant="primary">{roleLabel}</Badge>
+                <span className="text-xs text-[#6B7A71] hidden sm:inline">•</span>
+                <span className="text-xs text-[#6B7A71]">
+                  Gestión de ventas, valuación de inventarios y estado de caja
+                </span>
               </div>
-              <p className="text-xs text-[#6B7A71] mt-0.5">
-                Acceso completo a métricas de ventas, valuación de inventarios y estado de caja
-              </p>
             </div>
           </div>
 
