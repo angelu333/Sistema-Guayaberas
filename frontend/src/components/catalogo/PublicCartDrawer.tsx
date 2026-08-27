@@ -8,9 +8,10 @@ import {
   Minus,
   Trash2,
   MessageCircle,
-  CheckCircle,
+  Loader2,
   Shirt,
 } from "lucide-react";
+import { quotesService } from "@/services/quotes.service";
 
 export interface PublicCartItem {
   cartItemId: string;
@@ -29,6 +30,7 @@ interface PublicCartDrawerProps {
   onUpdateQuantity: (cartItemId: string, newQuantity: number) => void;
   onRemoveItem: (cartItemId: string) => void;
   onClearCart: () => void;
+  tenantId?: string;
   tenantName?: string;
   tenantWhatsapp?: string | null;
 }
@@ -38,21 +40,53 @@ export function PublicCartDrawer({
   onUpdateQuantity,
   onRemoveItem,
   onClearCart,
+  tenantId,
   tenantName = "Guayaberas Ábito & Montejo",
   tenantWhatsapp,
 }: PublicCartDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [sending, setSending] = useState(false);
 
   const totalPieces = items.reduce((acc, item) => acc + item.quantity, 0);
   const totalAmount = items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
 
   if (items.length === 0) return null;
 
-  const handleSendWhatsAppCart = () => {
+  const handleSendWhatsAppCart = async () => {
     const phone = tenantWhatsapp || "";
     if (!phone) {
       alert("No hay número de WhatsApp registrado en la empresa.");
       return;
+    }
+
+    setSending(true);
+
+    let quoteNumber = "";
+    // Registrar cotización automáticamente en Supabase si se provee tenantId
+    if (tenantId) {
+      try {
+        const quoteItems = items.map((i) => ({
+          variantId: i.variantId,
+          quantity: i.quantity,
+          unitPrice: i.unitPrice,
+        }));
+
+        const res = await quotesService.createQuote(
+          tenantId,
+          "Cliente Catálogo Digital",
+          phone,
+          quoteItems,
+          [], // Tiers por defecto
+          "Cotización registrada automáticamente desde el Catálogo Digital Público",
+          15
+        );
+
+        if (res.success && res.quoteNumber) {
+          quoteNumber = res.quoteNumber;
+        }
+      } catch (err) {
+        console.warn("No se pudo registrar cotización automática en Supabase:", err);
+      }
     }
 
     const itemsText = items
@@ -66,13 +100,17 @@ export function PublicCartDrawer({
       )
       .join("\n\n");
 
+    const folioText = quoteNumber ? ` (Folio: *${quoteNumber}*)` : "";
+
     const message =
-      `¡Hola ${tenantName}! Me interesa cotizar/pedir la siguiente lista de guayaberas:\n\n` +
+      `¡Hola ${tenantName}! Me interesa cotizar/pedir la siguiente lista de guayaberas${folioText}:\n\n` +
       `${itemsText}\n\n` +
       `━━━━━━━━━━━━━━━━━━━━━━\n` +
       `📦 *Total de prendas:* ${totalPieces}\n` +
       `💵 *Total estimado:* *$${totalAmount.toLocaleString("es-MX", { minimumFractionDigits: 2 })} MXN*\n\n` +
       `¿Tienen disponibilidad para entrega o envío?`;
+
+    setSending(false);
 
     window.open(
       `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
@@ -224,15 +262,20 @@ export function PublicCartDrawer({
 
               <button
                 onClick={handleSendWhatsAppCart}
-                className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2 shadow-md transition-all hover:opacity-95"
+                disabled={sending}
+                className="w-full py-3.5 rounded-xl font-extrabold text-sm text-white flex items-center justify-center gap-2 shadow-md transition-all hover:opacity-95 disabled:opacity-50"
                 style={{ backgroundColor: "#25D366" }}
               >
-                <MessageCircle className="w-5 h-5" />
-                Enviar Pedido por WhatsApp
+                {sending ? (
+                  <Loader2 className="w-5 h-5 animate-spin text-white" />
+                ) : (
+                  <MessageCircle className="w-5 h-5" />
+                )}
+                {sending ? "Generando Folio..." : "Enviar Pedido por WhatsApp"}
               </button>
 
               <p className="text-[10px] text-center text-[#8B7D6B]">
-                Se enviará el desglose completo directo al WhatsApp de {tenantName}.
+                Se registrará la cotización en el sistema y se abrirá WhatsApp con el folio generado.
               </p>
             </div>
           </div>

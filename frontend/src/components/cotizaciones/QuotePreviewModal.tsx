@@ -202,20 +202,17 @@ export function QuotePreviewModal({
           </div>
 
           {/* Notas y Condiciones */}
-          {quote.notes && (
-            <div className="p-3 bg-[#F8F6F1] rounded-xl border border-[#DDD9D0] text-xs">
-              <span className="font-bold text-[#6B7A71] block uppercase tracking-wider mb-0.5">
-                Notas & Condiciones de Entrega:
-              </span>
-              <p className="text-[#26302B]">{quote.notes}</p>
-            </div>
-          )}
+          <div className="p-3.5 bg-[#F8F6F1] rounded-xl border border-[#DDD9D0] text-xs space-y-1">
+            <span className="font-bold text-[#6B7A71] block uppercase tracking-wider text-[10px]">
+              Notas & Condiciones de Entrega:
+            </span>
+            <p className="text-[#26302B] leading-relaxed">
+              {quote.notes || "El costo de envío no está incluido en el precio final y corre por cuenta del cliente. Cotización sujeta a disponibilidad de inventario o tiempo de confección en taller."}
+            </p>
+          </div>
 
           {/* Footer de Firma / Términos */}
-          <div className="pt-6 border-t border-[#DDD9D0] text-center text-[10px] text-[#8FA393] space-y-1">
-            <p className="font-medium text-[#6B7A71]">
-              Esta cotización está sujeta a disponibilidad de inventario o tiempo de confección en taller.
-            </p>
+          <div className="pt-4 border-t border-[#DDD9D0] text-center text-[10px] text-[#8FA393] space-y-0.5">
             <p className="font-bold text-[#556B5D]">¡Gracias por su confianza y preferencia!</p>
           </div>
         </div>

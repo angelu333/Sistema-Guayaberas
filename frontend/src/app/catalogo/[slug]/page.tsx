@@ -190,36 +190,6 @@ function PublicCatalogContent({ slug }: { slug: string }) {
               </div>
             </div>
           </div>
-
-          {/* Acciones Header */}
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={handleCopyLink}
-              title="Compartir catálogo"
-              className="px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all"
-              style={{
-                borderColor: "#E4DDD1",
-                backgroundColor: copiedLink ? "#EDE7DA" : "white",
-                color: "#556B5D",
-              }}
-            >
-              <Share2 className="w-4 h-4" />
-              <span className="hidden sm:inline">{copiedLink ? "¡Copiado!" : "Compartir"}</span>
-            </button>
-
-            {(tenantInfo?.whatsapp || tenantInfo?.phone) && (
-              <a
-                href={`https://wa.me/${(tenantInfo.whatsapp || tenantInfo.phone || "").replace(/\D/g, "")}`}
-                target="_blank"
-                rel="noreferrer"
-                className="px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-xs"
-                style={{ backgroundColor: "#25D366", color: "white" }}
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span className="hidden sm:inline">WhatsApp</span>
-              </a>
-            )}
-          </div>
         </div>
       </header>
 
@@ -544,6 +514,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
         onUpdateQuantity={handleUpdateCartQuantity}
         onRemoveItem={handleRemoveCartItem}
         onClearCart={handleClearCart}
+        tenantId={tenantInfo?.id}
         tenantName={tenantInfo?.name}
         tenantWhatsapp={tenantInfo?.whatsapp || tenantInfo?.phone}
       />

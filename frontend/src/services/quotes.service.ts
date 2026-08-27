@@ -465,6 +465,85 @@ export const quotesService = {
   },
 
   /**
+   * Actualiza las notas/términos personalizados de una cotización para el PDF
+   */
+  async updateQuoteNotes(
+    quoteId: string,
+    notes: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const { error } = await supabase
+      .from("cotizaciones")
+      .update({ notes: notes.trim() || null })
+      .eq("id", quoteId);
+
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  },
+
+  /**
+   * Actualiza los ítems, cantidades y precios de una cotización existente
+   */
+  async updateQuoteItems(
+    quoteId: string,
+    tenantId: string,
+    items: CreateQuoteItemDTO[],
+    tiers: WholesaleTier[],
+    notes?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    await supabase.from("detalle_cotizaciones").delete().eq("quote_id", quoteId);
+
+    const totalPieces = items.reduce((acc, i) => acc + i.quantity, 0);
+    const discountPercent = this.calculateTierDiscount(totalPieces, tiers);
+
+    let rawSubtotal = 0;
+    let finalSubtotal = 0;
+
+    const detailRows = items.map((item) => {
+      const lineSubtotalRaw = item.quantity * item.unitPrice;
+      const finalPrice = item.unitPrice * (1 - discountPercent / 100);
+      const lineSubtotalFinal = item.quantity * finalPrice;
+
+      rawSubtotal += lineSubtotalRaw;
+      finalSubtotal += lineSubtotalFinal;
+
+      return {
+        quote_id: quoteId,
+        tenant_id: tenantId,
+        variant_id: item.variantId,
+        quantity: item.quantity,
+        unit_price: item.unitPrice,
+        discount_percent: discountPercent,
+        final_unit_price: finalPrice,
+        subtotal: lineSubtotalFinal,
+      };
+    });
+
+    const discountAmount = rawSubtotal - finalSubtotal;
+
+    const { error: insertErr } = await supabase.from("detalle_cotizaciones").insert(detailRows);
+    if (insertErr) return { success: false, error: insertErr.message };
+
+    const updateObj: any = {
+      total_pieces: totalPieces,
+      subtotal: rawSubtotal,
+      discount_amount: discountAmount,
+      total_amount: finalSubtotal,
+    };
+    if (notes !== undefined) {
+      updateObj.notes = notes.trim() || null;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("cotizaciones")
+      .update(updateObj)
+      .eq("id", quoteId);
+
+    if (updateErr) return { success: false, error: updateErr.message };
+
+    return { success: true };
+  },
+
+  /**
    * Actualiza el estado de una cotización
    */
   async updateQuoteStatus(

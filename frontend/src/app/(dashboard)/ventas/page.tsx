@@ -21,10 +21,13 @@ import {
   Share2,
   ShoppingCart,
   Receipt,
+  Edit,
+  XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { useTenantStore } from "@/stores/tenant.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { salesService, type SaleRecord } from "@/services/sales.service";
@@ -36,6 +39,7 @@ import {
 } from "@/services/quotes.service";
 import { NewQuoteModal } from "@/components/cotizaciones/NewQuoteModal";
 import { QuotePreviewModal } from "@/components/cotizaciones/QuotePreviewModal";
+import { QuoteEditModal } from "@/components/cotizaciones/QuoteEditModal";
 import { WholesaleTierModal } from "@/components/cotizaciones/WholesaleTierModal";
 
 export default function VentasYCotizacionesPage() {
@@ -70,6 +74,7 @@ export default function VentasYCotizacionesPage() {
   const [isNewQuoteModalOpen, setIsNewQuoteModalOpen] = useState(false);
   const [isTierModalOpen, setIsTierModalOpen] = useState(false);
   const [previewQuote, setPreviewQuote] = useState<QuoteRecord | null>(null);
+  const [editingQuote, setEditingQuote] = useState<QuoteRecord | null>(null);
 
   const loadSalesData = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -101,22 +106,38 @@ export default function VentasYCotizacionesPage() {
   }, [effectiveTenantId]);
 
   useEffect(() => {
-    loadSalesData();
-    loadQuotesData();
-  }, [loadSalesData, loadQuotesData]);
+    if (activeTab === "ventas") {
+      loadSalesData();
+    } else {
+      loadQuotesData();
+    }
+  }, [activeTab, loadSalesData, loadQuotesData]);
 
-  function handleTabChange(tab: "ventas" | "cotizaciones") {
+  const handleTabChange = (tab: "ventas" | "cotizaciones") => {
     setActiveTab(tab);
     router.replace(`/ventas?tab=${tab}`);
-  }
+  };
 
-  // Métodos Cotizaciones
+  const filteredSales = sales.filter((s) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      s.ticketNumber.toLowerCase().includes(q) ||
+      (s.clientName && s.clientName.toLowerCase().includes(q))
+    );
+  });
+
+  const filteredQuotes = quotes.filter((q) => {
+    if (statusFilter === "all") return true;
+    return q.status === statusFilter;
+  });
+
   const handleCreateQuote = async (
     clientName: string,
     clientPhone: string | null,
     items: CreateQuoteItemDTO[],
     notes?: string,
-    validDays?: number
+    validDays: number = 15
   ) => {
     if (!effectiveTenantId) return;
     const res = await quotesService.createQuote(
@@ -129,175 +150,211 @@ export default function VentasYCotizacionesPage() {
       validDays,
       session?.userId
     );
-    if (res.success && res.quoteId) {
-      await loadQuotesData();
-      const created = await quotesService.getQuoteById(res.quoteId);
-      if (created) setPreviewQuote(created);
-    } else {
-      alert(res.error || "Error al crear cotización.");
-    }
-  };
-
-  const handleChangeStatus = async (quoteId: string, newStatus: QuoteRecord["status"]) => {
-    const res = await quotesService.updateQuoteStatus(quoteId, newStatus);
     if (res.success) {
-      await loadQuotesData();
+      loadQuotesData();
     }
   };
 
   const handleConvertToSale = async (quote: QuoteRecord) => {
-    if (!confirm(`¿Desea convertir la Cotización ${quote.quoteNumber} de ${quote.clientName} en una Venta Oficial?\n\nEsto descontará automáticamente ${quote.totalPieces} guayaberas del inventario y registrará el cobro.`)) {
+    if (
+      !confirm(
+        `¿Deseas convertir la Cotización #${quote.quoteNumber} en una Venta Oficial por $${quote.totalAmount.toFixed(
+          2
+        )} MXN? Se descontarán los artículos del inventario.`
+      )
+    ) {
       return;
     }
+
     const res = await quotesService.convertQuoteToSale(quote.id, session?.userId);
-    if (res.success && res.ticketNumber) {
-      alert(`¡Venta Registrada con Éxito!\nTicket #${res.ticketNumber}`);
-      await Promise.all([loadQuotesData(), loadSalesData()]);
+    if (res.success) {
+      alert(`¡Venta registrada exitosamente! Ticket #${res.ticketNumber}`);
+      loadQuotesData();
     } else {
-      alert(res.error || "Error al convertir a venta.");
+      alert(`Error al registrar la venta: ${res.error}`);
     }
   };
 
   const handleCopyWhatsAppLink = (quote: QuoteRecord) => {
-    const publicUrl = `${window.location.origin}/cotizacion/${quote.id}`;
-    const text = `Hola ${quote.clientName}, aquí tienes tu cotización de guayaberas al mayoreo (${quote.totalPieces} pzas) por un total de $${quote.totalAmount.toFixed(2)} MXN: ${publicUrl}`;
-    navigator.clipboard.writeText(text);
-    alert("¡Enlace copiado al portapapeles para WhatsApp!");
+    const phone = quote.clientPhone ? quote.clientPhone.replace(/\D/g, "") : "";
+    const itemsText = quote.details
+      .map(
+        (d) =>
+          `• ${d.productName} (${d.colorName || ""}/${d.sizeName || ""}) x${d.quantity} - $${d.subtotal.toFixed(2)}`
+      )
+      .join("\n");
+
+    const text =
+      `¡Hola ${quote.clientName}! Adjuntamos tu Cotización #${quote.quoteNumber}:\n\n` +
+      `${itemsText}\n\n` +
+      `Total Estimado: $${quote.totalAmount.toFixed(2)} MXN\n` +
+      `Puedes ver el desglose en: ${window.location.origin}/cotizacion/${quote.id}`;
+
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, "_blank");
+    } else {
+      navigator.clipboard.writeText(text);
+      alert("¡Texto de cotización copiado al portapapeles!");
+    }
   };
 
-  const filteredSales = sales.filter((s) => {
-    const q = searchQuery.toLowerCase();
-    return (
-      s.ticketNumber.toLowerCase().includes(q) ||
-      (s.clientName || "").toLowerCase().includes(q) ||
-      (s.sellerName || "").toLowerCase().includes(q)
-    );
-  });
-
-  const filteredQuotes = quotes.filter((q) => {
-    if (statusFilter === "all") return true;
-    return q.status === statusFilter;
-  });
-
-  const methodIcon = (method: string) => {
-    if (method === "cash") return <Banknote className="w-3.5 h-3.5" />;
-    if (method === "card") return <CreditCard className="w-3.5 h-3.5" />;
-    return <ArrowRightLeft className="w-3.5 h-3.5" />;
+  const methodLabel = (m: string) => {
+    switch (m) {
+      case "cash":
+        return "Efectivo";
+      case "card":
+        return "Tarjeta";
+      case "transfer":
+        return "Transferencia";
+      default:
+        return m;
+    }
   };
 
-  const methodLabel = (method: string) =>
-    method === "cash" ? "Efectivo" : method === "card" ? "Tarjeta" : "Transferencia";
+  const methodIcon = (m: string) => {
+    switch (m) {
+      case "cash":
+        return <Banknote className="w-3.5 h-3.5 text-[#3F7D58]" />;
+      case "card":
+        return <CreditCard className="w-3.5 h-3.5 text-[#C49A5A]" />;
+      case "transfer":
+        return <ArrowRightLeft className="w-3.5 h-3.5 text-[#556B5D]" />;
+      default:
+        return <DollarSign className="w-3.5 h-3.5" />;
+    }
+  };
 
-  const totalRevenue = sales.filter((s) => s.status === "completed").reduce((acc, s) => acc + s.total, 0);
+  const statusBadge = (st: QuoteRecord["status"]) => {
+    switch (st) {
+      case "draft":
+      case "sent":
+        return <Badge variant="neutral">Enviada / Pendiente</Badge>;
+      case "accepted":
+        return <Badge variant="success">Aceptada</Badge>;
+      case "rejected":
+        return <Badge variant="error">Rechazada / No finalizada</Badge>;
+      case "converted":
+        return <Badge variant="primary">Convertida a Venta</Badge>;
+      default:
+        return <Badge variant="neutral">{st}</Badge>;
+    }
+  };
+
+  const acceptedCount = quotes.filter((q) => q.status === "accepted").length;
   const totalAmountCotizado = quotes.reduce((acc, q) => acc + q.totalAmount, 0);
-  const acceptedCount = quotes.filter((q) => q.status === "accepted" || q.status === "converted").length;
 
   return (
-    <div className="space-y-6 font-[Outfit]">
-      {/* Header Principal */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="page-container space-y-6">
+      {/* Header General */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#26302B] tracking-tight">
+          <h1 className="text-2xl font-extrabold text-[#26302B] font-[Outfit] tracking-tight">
             Ventas & Cotizaciones
           </h1>
-          <p className="text-sm text-[#6B7A71] mt-0.5">
-            Registro de transacciones en tienda y presupuestos de mayoreo
+          <p className="text-xs text-[#6B7A71] mt-0.5">
+            Historial de tickets cobrados, presupuestos de mayoreo y gestión de escalas
           </p>
         </div>
 
-        {/* Acciones segun pestaña */}
-        {activeTab === "ventas" ? (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={loadSalesData} title="Actualizar">
+        <div className="flex items-center gap-2">
+          {activeTab === "cotizaciones" ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setIsTierModalOpen(true)}>
+                <Sliders className="w-4 h-4 mr-1.5" /> Escalas de Mayoreo
+              </Button>
+              <Button size="sm" onClick={() => setIsNewQuoteModalOpen(true)} className="bg-[#556B5D]">
+                <Plus className="w-4 h-4 mr-1.5" /> Nueva Cotización
+              </Button>
+            </>
+          ) : (
+            <Button variant="outline" size="sm" onClick={loadSalesData}>
               <RefreshCw className={`w-4 h-4 ${loadingSales ? "animate-spin" : ""}`} />
               Actualizar
             </Button>
-            <Button onClick={() => (window.location.href = "/pos")}>
-              <ArrowUpRight className="w-4 h-4 mr-1" />
-              Ir al POS
-            </Button>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" onClick={() => setIsTierModalOpen(true)}>
-              <Sliders className="w-4 h-4 mr-1.5" />
-              Escalas Mayoreo
-            </Button>
-            <Button onClick={() => setIsNewQuoteModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Nueva Cotización
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Pestañas de Selector */}
-      <div className="flex border-b border-[#E7E3DA] gap-6">
+      {/* Tabs Principales: Ventas / Cotizaciones */}
+      <div className="flex border-b border-[#DDD9D0]">
         <button
           onClick={() => handleTabChange("ventas")}
-          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === "ventas"
               ? "border-[#556B5D] text-[#556B5D]"
-              : "border-transparent text-[#8FA393] hover:text-[#26302B]"
+              : "border-transparent text-[#6B7A71] hover:text-[#26302B]"
           }`}
         >
           <Receipt className="w-4 h-4" />
-          Historial de Ventas ({sales.length})
+          Historial de Ventas (Tickets)
         </button>
+
         <button
           onClick={() => handleTabChange("cotizaciones")}
-          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all ${
+          className={`pb-3 px-4 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${
             activeTab === "cotizaciones"
               ? "border-[#556B5D] text-[#556B5D]"
-              : "border-transparent text-[#8FA393] hover:text-[#26302B]"
+              : "border-transparent text-[#6B7A71] hover:text-[#26302B]"
           }`}
         >
           <FileText className="w-4 h-4" />
-          Cotizaciones Mayoreo ({quotes.length})
+          Cotizaciones de Mayoreo
+          {quotes.length > 0 && (
+            <span className="ml-1 bg-[#EDE7DA] text-[#556B5D] text-xs font-mono px-2 py-0.5 rounded-full">
+              {quotes.length}
+            </span>
+          )}
         </button>
       </div>
 
-      {/* CONTENIDO PESTAÑA 1: VENTAS */}
+      {/* CONTENIDO PESTAÑA 1: HISTORIAL DE VENTAS */}
       {activeTab === "ventas" && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card className="p-4 border-l-4 border-l-[#556B5D]">
-              <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ventas Hoy</p>
-              <p className="text-2xl font-bold text-[#26302B] mt-1">{loadingSales ? "..." : salesMetrics.salesToday}</p>
-              <p className="text-xs text-[#8FA393] mt-0.5">${loadingSales ? "..." : salesMetrics.revenueToday.toFixed(2)}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <Card padding="md" className="border-l-4 border-l-[#556B5D]">
+              <span className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ventas de Hoy</span>
+              <p className="text-2xl font-bold text-[#26302B] mt-1 font-[Outfit]">
+                {loadingSales ? "..." : salesMetrics.salesToday}
+              </p>
             </Card>
 
-            <Card className="p-4 border-l-4 border-l-[#8FA393]">
-              <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Esta Semana</p>
-              <p className="text-2xl font-bold text-[#26302B] mt-1">{loadingSales ? "..." : salesMetrics.salesThisWeek}</p>
-              <p className="text-xs text-[#8FA393] mt-0.5">${loadingSales ? "..." : salesMetrics.revenueThisWeek.toFixed(2)}</p>
+            <Card padding="md" className="border-l-4 border-l-[#3F7D58]">
+              <span className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ingresos de Hoy</span>
+              <p className="text-2xl font-bold text-[#3F7D58] mt-1 font-[Outfit]">
+                {loadingSales ? "..." : `$${salesMetrics.revenueToday.toFixed(2)}`}
+              </p>
             </Card>
 
-            <Card className="p-4 border-l-4 border-l-[#C49A5A]">
-              <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Total Registros</p>
-              <p className="text-2xl font-bold text-[#26302B] mt-1">{loadingSales ? "..." : sales.length}</p>
-              <p className="text-xs text-[#8FA393] mt-0.5">Todas las ventas</p>
+            <Card padding="md" className="border-l-4 border-l-[#C49A5A]">
+              <span className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ventas Esta Semana</span>
+              <p className="text-2xl font-bold text-[#26302B] mt-1 font-[Outfit]">
+                {loadingSales ? "..." : salesMetrics.salesThisWeek}
+              </p>
             </Card>
 
-            <Card className="p-4 border-l-4 border-l-[#3F7D58]">
-              <p className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ingresos Totales</p>
-              <p className="text-2xl font-bold text-[#3F7D58] mt-1">{loadingSales ? "..." : `$${totalRevenue.toFixed(0)}`}</p>
-              <p className="text-xs text-[#8FA393] mt-0.5">Ventas completadas</p>
+            <Card padding="md" className="border-l-4 border-l-[#26302B]">
+              <span className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">Ingresos Esta Semana</span>
+              <p className="text-2xl font-bold text-[#3F7D58] mt-1 font-[Outfit]">
+                {loadingSales ? "..." : `$${salesMetrics.revenueThisWeek.toFixed(2)}`}
+              </p>
             </Card>
           </div>
 
           <Card className="overflow-hidden">
-            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1]">
-              <div className="relative max-w-md">
+            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1] flex items-center justify-between gap-4">
+              <div className="relative flex-1 max-w-sm">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
-                <input
-                  type="text"
-                  placeholder="Buscar por ticket, cliente o vendedor..."
+                <Input
+                  placeholder="Buscar por ticket o cliente..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-[#DDD9D0] rounded-lg focus:outline-none focus:border-[#556B5D]"
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                  className="pl-9 bg-white"
                 />
               </div>
+
+              <span className="text-xs font-semibold text-[#6B7A71]">
+                Mostrando {filteredSales.length} transacciones
+              </span>
             </div>
 
             <div className="overflow-x-auto">
@@ -305,10 +362,10 @@ export default function VentasYCotizacionesPage() {
                 <thead>
                   <tr className="border-b border-[#DDD9D0] bg-[#F8F6F1] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
                     <th className="py-3 px-4">Ticket</th>
-                    <th className="py-3 px-4">Fecha</th>
+                    <th className="py-3 px-4">Fecha & Hora</th>
                     <th className="py-3 px-4">Cliente</th>
-                    <th className="py-3 px-4">Vendedor</th>
-                    <th className="py-3 px-4">Pago</th>
+                    <th className="py-3 px-4 text-center">Artículos</th>
+                    <th className="py-3 px-4">Forma de Pago</th>
                     <th className="py-3 px-4 text-right">Total</th>
                     <th className="py-3 px-4 text-center">Estado</th>
                     <th className="py-3 px-4"></th>
@@ -323,30 +380,30 @@ export default function VentasYCotizacionesPage() {
                     </tr>
                   ) : filteredSales.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center">
-                        <ShoppingBag className="w-10 h-10 text-[#DDD9D0] mx-auto mb-2" />
-                        <p className="text-[#6B7A71]">
-                          {searchQuery ? "Sin resultados" : "Aún no hay ventas registradas"}
-                        </p>
+                      <td colSpan={8} className="py-12 text-center text-[#6B7A71]">
+                        No se encontraron registros de ventas.
                       </td>
                     </tr>
                   ) : (
                     filteredSales.map((sale) => (
                       <Fragment key={sale.id}>
                         <tr
-                          className="hover:bg-[#F8F6F1]/50 transition-colors cursor-pointer"
                           onClick={() => setExpandedId(expandedId === sale.id ? null : sale.id)}
+                          className="cursor-pointer hover:bg-[#F8F6F1]/50 transition-colors"
                         >
-                          <td className="py-3 px-4 font-mono font-semibold text-[#556B5D]">
+                          <td className="py-3 px-4 font-mono font-bold text-[#556B5D]">
                             {sale.ticketNumber}
                           </td>
                           <td className="py-3 px-4 text-xs text-[#6B7A71]">
-                            {new Date(sale.createdAt).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                            {new Date(sale.createdAt).toLocaleDateString("es-MX")} ·{" "}
+                            {new Date(sale.createdAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
                           </td>
-                          <td className="py-3 px-4 text-xs">
-                            {sale.clientName || <span className="text-[#9DAAA2]">Público general</span>}
+                          <td className="py-3 px-4 font-semibold">
+                            {sale.clientName || "Público General"}
                           </td>
-                          <td className="py-3 px-4 text-xs text-[#6B7A71]">{sale.sellerName || "-"}</td>
+                          <td className="py-3 px-4 text-center font-bold text-xs">
+                            {sale.items.reduce((acc, i) => acc + i.quantity, 0)} pzas
+                          </td>
                           <td className="py-3 px-4">
                             {sale.payments.map((p, i) => (
                               <span key={i} className="inline-flex items-center gap-1 text-xs text-[#6B7A71]">
@@ -477,17 +534,23 @@ export default function VentasYCotizacionesPage() {
 
           <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border border-[#DDD9D0]">
             <span className="text-xs font-bold text-[#6B7A71] px-2 uppercase tracking-wider">Estado:</span>
-            {["all", "draft", "accepted", "converted"].map((st) => (
+            {[
+              { id: "all", label: "Todas" },
+              { id: "sent", label: "Enviadas / Pendientes" },
+              { id: "accepted", label: "Aceptadas" },
+              { id: "rejected", label: "Rechazadas / No Finalizadas" },
+              { id: "converted", label: "Convertidas a Venta" },
+            ].map((st) => (
               <button
-                key={st}
-                onClick={() => setStatusFilter(st)}
+                key={st.id}
+                onClick={() => setStatusFilter(st.id)}
                 className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                  statusFilter === st
+                  statusFilter === st.id
                     ? "bg-[#556B5D] text-white"
                     : "bg-[#F8F6F1] text-[#6B7A71] hover:text-[#26302B]"
                 }`}
               >
-                {st === "all" ? "Todas" : st === "draft" ? "Borradores" : st === "accepted" ? "Aceptadas" : "Convertidas"}
+                {st.label}
               </button>
             ))}
           </div>
@@ -526,21 +589,25 @@ export default function VentasYCotizacionesPage() {
                         <td className="py-3 px-4 font-bold">{q.clientName}</td>
                         <td className="py-3 px-4 text-center font-bold text-xs">{q.totalPieces} pzas</td>
                         <td className="py-3 px-4 text-center">
-                          <Badge variant={q.status === "accepted" || q.status === "converted" ? "success" : "neutral"}>
-                            {q.status === "draft" ? "Borrador" : q.status === "accepted" ? "Aceptada" : "En Venta/POS"}
-                          </Badge>
+                          {statusBadge(q.status)}
                         </td>
                         <td className="py-3 px-4 text-right font-mono font-bold text-[#3F7D58]">${q.totalAmount.toFixed(2)}</td>
                         <td className="py-3 px-4 text-center text-xs text-[#6B7A71]">{new Date(q.createdAt).toLocaleDateString("es-MX")}</td>
                         <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
+                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
                             <Button size="sm" variant="outline" onClick={() => setPreviewQuote(q)} title="Ticket/PDF">
-                              <Eye className="w-3.5 h-3.5 mr-1" /> Ticket/PDF
+                              <Eye className="w-3.5 h-3.5 mr-1" /> PDF
                             </Button>
-                            <Button size="sm" variant="outline" onClick={() => handleCopyWhatsAppLink(q)}>
+                            
+                            <Button size="sm" variant="outline" onClick={() => setEditingQuote(q)} title="Editar Cotización">
+                              <Edit className="w-3.5 h-3.5 text-[#556B5D] mr-1" /> Editar
+                            </Button>
+
+                            <Button size="sm" variant="outline" onClick={() => handleCopyWhatsAppLink(q)} title="Enviar WhatsApp">
                               <Share2 className="w-3.5 h-3.5 text-[#3F7D58]" />
                             </Button>
-                            {q.status === "accepted" && (
+
+                            {q.status !== "converted" && (
                               <Button size="sm" onClick={() => handleConvertToSale(q)} className="bg-[#3F7D58] text-xs py-1 text-white font-bold">
                                 <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Vender
                               </Button>
@@ -570,6 +637,15 @@ export default function VentasYCotizacionesPage() {
         isOpen={!!previewQuote}
         onClose={() => setPreviewQuote(null)}
         quote={previewQuote}
+      />
+
+      <QuoteEditModal
+        isOpen={!!editingQuote}
+        onClose={() => setEditingQuote(null)}
+        quote={editingQuote}
+        tenantId={effectiveTenantId || ""}
+        tiers={tiers}
+        onQuoteUpdated={loadQuotesData}
       />
 
       <WholesaleTierModal
