@@ -76,6 +76,14 @@ Este documento resume de forma comprimida y estructurada **todo lo hablado, dise
 - **Selector de Sucursal Integrado**: Selector interactivo en el pie del Sidebar.
 - **Consolidación de Menú**: Sidebar optimizado y limpio con 10 secciones principales.
 
+### 📱 PWA + Notificaciones Push Web (`/configuracion → Notificaciones Push`)
+- **App Instalable**: La web es una PWA con `manifest.json`, íconos en 8 tamaños (72→512px) e ícono de guayabera artesanal.
+- **Service Worker**: `sw.js` registrado automáticamente. Maneja notificaciones push en segundo plano y página offline.
+- **Panel de Control**: Configuración → "Notificaciones Push" permite activar/desactivar alertas por dispositivo y enviar notificación de prueba.
+- **Alerta de Nueva Venta**: Al cobrar en el POS se dispara un push a todos los dispositivos suscritos del tenant.
+- **Tabla Supabase**: `push_subscriptions` con RLS por tenant y limpieza automática de endpoints expirados.
+- **⚠️ Pendiente del usuario**: Ejecutar `014_push_subscriptions.sql` en Supabase y poner `SUPABASE_SERVICE_ROLE_KEY` en `.env.local`.
+
 ---
 
 ## 🗄️ 4. Estructura de Migraciones SQL Aplicadas
@@ -90,10 +98,12 @@ Este documento resume de forma comprimida y estructurada **todo lo hablado, dise
 9. `011_quotes.sql`: `rangos_mayoreo`, `cotizaciones` y `detalle_cotizaciones`.
 10. `012_product_images.sql`: `imagenes_producto` y columna `image_url` en `productos`.
 11. `013_multistore_and_transfers.sql`: Columna `location_id` en `ventas`, tablas `transferencias` y `detalle_transferencias`, y función `generate_transfer_folio()`.
+12. `014_push_subscriptions.sql`: Tabla `push_subscriptions` con RLS, índices y trigger `updated_at` para notificaciones push Web.
 
 ---
 
 ## 📋 5. Instrucciones para la Siguiente Sesión Chat
 Cuando inicies un nuevo chat, simplemente puedes pegar este mensaje de bienvenida:
 
-> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `74299d8`). ¿Podemos continuar con el siguiente paso?"*
+> *"Hola, estoy continuando el desarrollo del proyecto **Guayabera Manager**. Tengo adjunto el archivo `CONTEXTO_PROYECTO_GUAYABERAS.md` con todo el contexto, módulos completados, base de datos y arquitectura. El repositorio está al día en GitHub (commit `242522d`). ¿Podemos continuar con el siguiente paso?"*
+
