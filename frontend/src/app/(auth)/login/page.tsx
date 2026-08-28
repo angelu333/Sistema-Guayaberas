@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import Link from "next/link";
@@ -42,7 +42,7 @@ export default function LoginPage() {
     try {
       const session = await authService.login(data);
       setSession(session);
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMsg(err.message);
@@ -51,6 +51,7 @@ export default function LoginPage() {
       }
     }
   };
+
 
   return (
     <Card padding="lg" className="w-full shadow-lg">

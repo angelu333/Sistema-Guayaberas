@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
 
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -16,6 +16,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
   const setTenant = useTenantStore((state) => state.setTenant);
@@ -45,6 +46,37 @@ export default function DashboardLayout({
             isActive: true,
             createdAt: "",
           });
+
+          // Control de acceso por rol (RBAC)
+          const role = currentSession.role;
+          if (role === "seller") {
+            const adminOnlyPaths = [
+              "/dashboard",
+              "/produccion",
+              "/insumos",
+              "/reportes",
+              "/configuracion",
+              "/sucursales",
+              "/auditoria",
+              "/compras",
+            ];
+            if (adminOnlyPaths.some((p) => pathname.startsWith(p))) {
+              router.push("/pos");
+            }
+          } else if (role === "production") {
+            const sellerOrAdminPaths = [
+              "/pos",
+              "/ventas",
+              "/cotizaciones",
+              "/clientes",
+              "/sucursales",
+              "/configuracion",
+              "/reportes",
+            ];
+            if (sellerOrAdminPaths.some((p) => pathname.startsWith(p))) {
+              router.push("/produccion");
+            }
+          }
         } else {
           router.push("/login");
         }
@@ -61,7 +93,8 @@ export default function DashboardLayout({
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [pathname]);
+
 
   if (checkingAuth && !session) {
     return (

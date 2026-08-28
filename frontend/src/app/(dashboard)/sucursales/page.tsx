@@ -20,6 +20,15 @@ import {
   XCircle,
   Trash2,
   Search,
+  Users,
+  UserPlus,
+  Shield,
+  Key,
+  Eye,
+  EyeOff,
+  UserCheck,
+  UserX,
+  Lock,
 } from "lucide-react";
 import {
   locationsService,
@@ -32,6 +41,8 @@ import {
   TransferRecord,
   TransferItem,
 } from "@/services/transfers.service";
+import { usersService } from "@/services/users.service";
+import { UserProfile, UserRole } from "@/types/domain.types";
 import { useAuthStore } from "@/stores/auth.store";
 import { useLocationStore } from "@/stores/location.store";
 
@@ -42,6 +53,7 @@ const statusConfig: Record<string, { label: string; color: string; icon: React.R
   completada: { label: "Completada", color: "bg-[#EEF5F0] text-[#3F7D58] border-[#B6D8C3]", icon: <CheckCircle2 className="w-3 h-3" /> },
   cancelada: { label: "Cancelada", color: "bg-red-50 text-red-500 border-red-200", icon: <XCircle className="w-3 h-3" /> },
 };
+
 
 // ==========================================
 // MODAL DE CREAR / EDITAR SUCURSAL
@@ -536,7 +548,209 @@ function TransferCard({ transfer }: { transfer: TransferRecord }) {
 }
 
 // ==========================================
-// PÁGINA CONSOLIDADA DE SUCURSALES Y TRASPASOS
+// MODAL DE CREAR / EDITAR USUARIO / CAJERO
+// ==========================================
+function UserAccountModal({
+  user,
+  locations,
+  onClose,
+  onSave,
+}: {
+  user: UserProfile | null;
+  locations: LocationDetail[];
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [fullName, setFullName] = useState(user?.fullName || "");
+  const [email, setEmail] = useState(user?.email || "");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState<UserRole>(user?.role || "seller");
+  const [locationId, setLocationId] = useState<string>(user?.locationId || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const activeLocations = locations.filter((l) => l.isActive);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+
+    if (!fullName.trim()) return setError("El nombre completo es obligatorio.");
+    if (!email.trim()) return setError("El correo electrónico es obligatorio.");
+    if (!user && (!password || password.length < 6)) {
+      return setError("La contraseña inicial debe tener al menos 6 caracteres.");
+    }
+    if (user && password && password.length < 6) {
+      return setError("La nueva contraseña debe tener al menos 6 caracteres.");
+    }
+
+    setSaving(true);
+    try {
+      if (user) {
+        await usersService.updateUser({
+          userId: user.id,
+          fullName,
+          role,
+          locationId: locationId || null,
+          password: password.trim() ? password.trim() : undefined,
+        });
+      } else {
+        await usersService.createUser({
+          fullName,
+          email,
+          password,
+          role,
+          locationId: locationId || null,
+        });
+      }
+      onSave();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || "Error al guardar usuario.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-fade-in font-[Outfit]">
+        <div className="bg-[#26302B] px-6 py-4">
+          <h2 className="font-bold text-lg text-white">
+            {user ? "Editar Cuenta de Colaborador" : "Nueva Cuenta / Empleado"}
+          </h2>
+          <p className="text-xs text-[#8FA393] mt-0.5">
+            {user
+              ? "Modifica los permisos, sucursal o contraseña del colaborador."
+              : "Registra credenciales de acceso para un vendedor, cajero o taller."}
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[#26302B] mb-1.5">
+              Nombre Completo / Identificador de Caja <span className="text-[#B85450]">*</span>
+            </label>
+            <input
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Ej. Juan Pérez o Caja Sucursal Norte"
+              className="w-full border border-[#C9C4B8] rounded-xl px-4 py-2.5 text-sm text-[#26302B] focus:outline-none focus:border-[#556B5D] focus:ring-2 focus:ring-[#556B5D]/15 bg-[#FAFAF8]"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#26302B] mb-1.5">
+              Correo Electrónico (Login) <span className="text-[#B85450]">*</span>
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={!!user}
+              placeholder="cajanorte@guayaberas.com"
+              className="w-full border border-[#C9C4B8] rounded-xl px-4 py-2.5 text-sm text-[#26302B] focus:outline-none focus:border-[#556B5D] focus:ring-2 focus:ring-[#556B5D]/15 bg-[#FAFAF8] disabled:opacity-60"
+              required
+            />
+            {user && (
+              <p className="text-[10px] text-[#8FA393] mt-1">
+                El correo de inicio de sesión no se puede modificar una vez creado.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[#26302B] mb-1.5">
+              {user ? "Nueva Contraseña (Opcional)" : "Contraseña de Acceso"} {!user && <span className="text-[#B85450]">*</span>}
+            </label>
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={user ? "Dejar en blanco para conservar actual" : "Mínimo 6 caracteres"}
+                className="w-full border border-[#C9C4B8] rounded-xl px-4 py-2.5 pr-10 text-sm text-[#26302B] focus:outline-none focus:border-[#556B5D] focus:ring-2 focus:ring-[#556B5D]/15 bg-[#FAFAF8]"
+                minLength={6}
+                required={!user}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8FA393] hover:text-[#26302B]"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[#26302B] mb-1.5">
+                Rol / Permisos <span className="text-[#B85450]">*</span>
+              </label>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value as UserRole)}
+                className="w-full border border-[#C9C4B8] rounded-xl px-3 py-2.5 text-sm text-[#26302B] focus:outline-none focus:border-[#556B5D] bg-[#FAFAF8]"
+              >
+                <option value="seller">🛍️ Vendedor / Caja</option>
+                <option value="production">🧵 Taller / Producción</option>
+                <option value="admin">👑 Administrador</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#26302B] mb-1.5">
+                Sucursal Asignada
+              </label>
+              <select
+                value={locationId}
+                onChange={(e) => setLocationId(e.target.value)}
+                className="w-full border border-[#C9C4B8] rounded-xl px-3 py-2.5 text-sm text-[#26302B] focus:outline-none focus:border-[#556B5D] bg-[#FAFAF8]"
+              >
+                <option value="">🌐 Acceso Global (Todas)</option>
+                {activeLocations.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    📍 {l.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {error && (
+            <p className="text-xs text-[#B85450] bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {error}
+            </p>
+          )}
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 border border-[#C9C4B8] rounded-xl py-2.5 text-sm font-semibold text-[#556B5D] hover:bg-[#F0EDE6] transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-[#556B5D] hover:bg-[#455A4D] text-white rounded-xl py-2.5 text-sm font-semibold transition-colors disabled:opacity-60"
+            >
+              {saving ? "Guardando..." : user ? "Actualizar cuenta" : "Crear cuenta"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// PÁGINA CONSOLIDADA DE SUCURSALES, TRASPASOS Y USUARIOS
 // ==========================================
 export default function SucursalesUnificadasPage() {
   const session = useAuthStore((s) => s.session);
@@ -544,8 +758,12 @@ export default function SucursalesUnificadasPage() {
   const router = useRouter();
 
   const activeTabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<"sucursales" | "transferencias">(
-    activeTabParam === "transferencias" ? "transferencias" : "sucursales"
+  const [activeTab, setActiveTab] = useState<"sucursales" | "transferencias" | "usuarios">(
+    activeTabParam === "transferencias"
+      ? "transferencias"
+      : activeTabParam === "usuarios"
+      ? "usuarios"
+      : "sucursales"
   );
 
   // Estados Sucursales
@@ -559,6 +777,13 @@ export default function SucursalesUnificadasPage() {
   const [transfers, setTransfers] = useState<TransferRecord[]>([]);
   const [loadingTransfers, setLoadingTransfers] = useState(true);
   const [showTransferModal, setShowTransferModal] = useState(false);
+
+  // Estados Usuarios
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   async function fetchLocations() {
     if (!session?.tenantId) return;
@@ -584,12 +809,25 @@ export default function SucursalesUnificadasPage() {
     }
   }
 
+  async function fetchUsers() {
+    if (!session?.tenantId) return;
+    try {
+      const uList = await usersService.getUsers();
+      setUsers(uList);
+    } catch (err) {
+      console.error("Error al cargar usuarios:", err);
+    } finally {
+      setLoadingUsers(false);
+    }
+  }
+
   useEffect(() => {
     fetchLocations();
     fetchTransfers();
+    fetchUsers();
   }, [session?.tenantId]);
 
-  function handleTabChange(tab: "sucursales" | "transferencias") {
+  function handleTabChange(tab: "sucursales" | "transferencias" | "usuarios") {
     setActiveTab(tab);
     router.replace(`/sucursales?tab=${tab}`);
   }
@@ -606,6 +844,42 @@ export default function SucursalesUnificadasPage() {
     }
   }
 
+  async function handleToggleUserActive(user: UserProfile) {
+    if (user.id === session?.userId) {
+      alert("No puedes desactivar tu propia cuenta activa de administrador.");
+      return;
+    }
+    setTogglingUserId(user.id);
+    try {
+      await usersService.updateUser({
+        userId: user.id,
+        isActive: !user.isActive,
+      });
+      await fetchUsers();
+    } catch (err: any) {
+      alert(err.message || "Error al actualizar estado del usuario.");
+    } finally {
+      setTogglingUserId(null);
+    }
+  }
+
+  async function handleDeleteUser(user: UserProfile) {
+    if (user.id === session?.userId) {
+      alert("No puedes eliminar tu propia cuenta activa.");
+      return;
+    }
+    if (!confirm(`¿Estás seguro de eliminar el acceso para "${user.fullName}"?`)) {
+      return;
+    }
+
+    try {
+      await usersService.deleteUser(user.id);
+      await fetchUsers();
+    } catch (err: any) {
+      alert(err.message || "Error al eliminar usuario.");
+    }
+  }
+
   const activeCount = locations.filter((l) => l.isActive).length;
   const totalStock = locations.reduce((acc, l) => acc + (l.totalStock || 0), 0);
   const totalPiezasTrasladadas = transfers
@@ -617,9 +891,9 @@ export default function SucursalesUnificadasPage() {
       {/* Encabezado Principal */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-bold text-2xl text-[#26302B]">Sucursales & Traspasos</h1>
+          <h1 className="font-bold text-2xl text-[#26302B]">Sucursales, Traspasos & Equipo</h1>
           <p className="text-sm text-[#6B7A71]">
-            Gestión de tiendas físicas, taller y transferencias de inventario
+            Gestión de tiendas físicas, traspasos de mercancía y cuentas de empleados
           </p>
         </div>
 
@@ -635,7 +909,7 @@ export default function SucursalesUnificadasPage() {
             <Plus className="w-4 h-4" />
             Nueva sucursal
           </button>
-        ) : (
+        ) : activeTab === "transferencias" ? (
           <button
             onClick={() => setShowTransferModal(true)}
             className="flex items-center gap-2 bg-[#556B5D] hover:bg-[#455A4D] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm"
@@ -643,14 +917,25 @@ export default function SucursalesUnificadasPage() {
             <Plus className="w-4 h-4" />
             Nueva transferencia
           </button>
+        ) : (
+          <button
+            onClick={() => {
+              setEditingUser(null);
+              setShowUserModal(true);
+            }}
+            className="flex items-center gap-2 bg-[#556B5D] hover:bg-[#455A4D] text-white px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors shadow-sm"
+          >
+            <UserPlus className="w-4 h-4" />
+            Nueva cuenta / Vendedor
+          </button>
         )}
       </div>
 
       {/* Pestañas de Selector */}
-      <div className="flex border-b border-[#E7E3DA] gap-6">
+      <div className="flex border-b border-[#E7E3DA] gap-6 overflow-x-auto">
         <button
           onClick={() => handleTabChange("sucursales")}
-          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all ${
+          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all whitespace-nowrap ${
             activeTab === "sucursales"
               ? "border-[#556B5D] text-[#556B5D]"
               : "border-transparent text-[#8FA393] hover:text-[#26302B]"
@@ -661,7 +946,7 @@ export default function SucursalesUnificadasPage() {
         </button>
         <button
           onClick={() => handleTabChange("transferencias")}
-          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all ${
+          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all whitespace-nowrap ${
             activeTab === "transferencias"
               ? "border-[#556B5D] text-[#556B5D]"
               : "border-transparent text-[#8FA393] hover:text-[#26302B]"
@@ -669,6 +954,17 @@ export default function SucursalesUnificadasPage() {
         >
           <ArrowLeftRight className="w-4 h-4" />
           Transferencias de Stock ({transfers.length})
+        </button>
+        <button
+          onClick={() => handleTabChange("usuarios")}
+          className={`flex items-center gap-2 py-3 border-b-2 text-sm font-bold transition-all whitespace-nowrap ${
+            activeTab === "usuarios"
+              ? "border-[#556B5D] text-[#556B5D]"
+              : "border-transparent text-[#8FA393] hover:text-[#26302B]"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Cuentas & Accesos ({users.length})
         </button>
       </div>
 
@@ -842,6 +1138,159 @@ export default function SucursalesUnificadasPage() {
         </div>
       )}
 
+      {/* CONTENIDO PESTAÑA 3: CUENTAS Y ACCESOS (USUARIOS) */}
+      {activeTab === "usuarios" && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-2xl border border-[#E7E3DA] p-4 shadow-sm">
+              <p className="text-xs font-semibold text-[#8FA393] uppercase tracking-wide">Total Cuentas</p>
+              <p className="text-3xl font-bold text-[#26302B] mt-1">{users.length}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E7E3DA] p-4 shadow-sm">
+              <p className="text-xs font-semibold text-[#8FA393] uppercase tracking-wide">Vendedores / Cajas</p>
+              <p className="text-3xl font-bold text-[#556B5D] mt-1">
+                {users.filter((u) => u.role === "seller").length}
+              </p>
+            </div>
+            <div className="bg-white rounded-2xl border border-[#E7E3DA] p-4 shadow-sm">
+              <p className="text-xs font-semibold text-[#8FA393] uppercase tracking-wide">Cuentas Activas</p>
+              <p className="text-3xl font-bold text-[#3F7D58] mt-1">
+                {users.filter((u) => u.isActive).length}
+              </p>
+            </div>
+          </div>
+
+          {loadingUsers ? (
+            <div className="flex justify-center py-16">
+              <div className="w-8 h-8 border-3 border-[#556B5D] border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : users.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-[#E7E3DA] p-12 text-center shadow-sm">
+              <Users className="w-12 h-12 text-[#C9C4B8] mx-auto mb-3" />
+              <p className="font-bold text-[#26302B] text-lg">Sin colaboradores registrados</p>
+              <p className="text-sm text-[#8FA393] mt-1 mb-4">
+                Crea cuentas de acceso con correo y contraseña para tus vendedores, cajeros o personal de taller.
+              </p>
+              <button
+                onClick={() => {
+                  setEditingUser(null);
+                  setShowUserModal(true);
+                }}
+                className="inline-flex items-center gap-2 bg-[#556B5D] text-white px-5 py-2.5 rounded-xl text-sm font-semibold"
+              >
+                <UserPlus className="w-4 h-4" />
+                Crear primera cuenta
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {users.map((u) => {
+                const isCurrentUser = u.id === session?.userId;
+                return (
+                  <div
+                    key={u.id}
+                    className={`bg-white rounded-2xl border shadow-sm transition-all ${
+                      u.isActive ? "border-[#E7E3DA]" : "border-[#E7E3DA] opacity-60"
+                    }`}
+                  >
+                    <div className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-[#556B5D] text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                          {u.fullName.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-[#26302B] text-base truncate">
+                              {u.fullName}
+                            </span>
+                            {isCurrentUser && (
+                              <span className="text-[10px] bg-[#EEF5F0] text-[#3F7D58] border border-[#B6D8C3] font-bold px-2 py-0.5 rounded-full">
+                                Tu Sesión
+                              </span>
+                            )}
+                            {!u.isActive && (
+                              <span className="text-[10px] bg-red-50 text-red-500 border border-red-200 font-semibold px-2 py-0.5 rounded-full">
+                                Acceso Suspendido
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-[#6B7A71] truncate mt-0.5">{u.email}</p>
+
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {/* Badge de Rol */}
+                            <span
+                              className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-lg border ${
+                                u.role === "admin"
+                                  ? "bg-[#FFF5CC] text-[#D89B2B] border-[#F5DFA0]"
+                                  : u.role === "production"
+                                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                                  : "bg-[#EEF1EE] text-[#556B5D] border-[#D5E0D7]"
+                              }`}
+                            >
+                              {u.role === "admin"
+                                ? "👑 Administrador"
+                                : u.role === "production"
+                                ? "🧵 Taller / Producción"
+                                : "🛍️ Vendedor / Caja"}
+                            </span>
+
+                            {/* Badge de Sucursal */}
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[#6B7A71] bg-[#FAFAF8] px-2.5 py-0.5 rounded-lg border border-[#E7E3DA]">
+                              <MapPin className="w-3 h-3 text-[#8FA393]" />
+                              {u.locationName || "Acceso Global (Todas)"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => {
+                            setEditingUser(u);
+                            setShowUserModal(true);
+                          }}
+                          className="p-2 rounded-xl border border-[#C9C4B8] bg-[#F8F6F1] hover:bg-[#E7E3DA] transition-colors"
+                          title="Editar cuenta / contraseña"
+                        >
+                          <Pencil className="w-4 h-4 text-[#556B5D]" />
+                        </button>
+                        {!isCurrentUser && (
+                          <>
+                            <button
+                              onClick={() => handleToggleUserActive(u)}
+                              disabled={togglingUserId === u.id}
+                              className={`p-2 rounded-xl border transition-colors disabled:opacity-50 ${
+                                u.isActive
+                                  ? "border-[#556B5D] bg-[#EEF1EE] hover:bg-[#D5E0D7]"
+                                  : "border-[#C9C4B8] bg-[#F8F6F1] hover:bg-[#E7E3DA]"
+                              }`}
+                              title={u.isActive ? "Suspender acceso" : "Reactivar acceso"}
+                            >
+                              {u.isActive ? (
+                                <ToggleRight className="w-4 h-4 text-[#556B5D]" />
+                              ) : (
+                                <ToggleLeft className="w-4 h-4 text-[#8FA393]" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-red-500 transition-colors"
+                              title="Eliminar cuenta"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Modales */}
       {showLocationModal && (
         <LocationModal
@@ -861,6 +1310,18 @@ export default function SucursalesUnificadasPage() {
           }}
         />
       )}
+
+      {showUserModal && (
+        <UserAccountModal
+          user={editingUser}
+          locations={locations}
+          onClose={() => setShowUserModal(false)}
+          onSave={() => {
+            fetchUsers();
+          }}
+        />
+      )}
     </div>
   );
 }
+

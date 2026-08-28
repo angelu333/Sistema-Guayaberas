@@ -41,9 +41,12 @@ export interface UserProfile {
   fullName: string;
   email: string;
   role: UserRole;
+  locationId?: string | null;
+  locationName?: string;
   isActive: boolean;
   createdAt: string;
 }
+
 
 // --- Productos ---
 

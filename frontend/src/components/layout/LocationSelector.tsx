@@ -13,6 +13,8 @@ export function LocationSelector({ isSidebar = false }: { isSidebar?: boolean })
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
+  const isLockedToBranch = session?.role === "seller" && !!session?.locationId;
+
   useEffect(() => {
     if (!session?.tenantId) return;
     locationsService
@@ -20,13 +22,23 @@ export function LocationSelector({ isSidebar = false }: { isSidebar?: boolean })
       .then((locs) => {
         const active = locs.filter((l) => l.isActive);
         setLocations(active);
+
+        // Si el usuario tiene una sucursal asignada fija
+        if (session?.locationId) {
+          const userLoc = active.find((l) => l.id === session.locationId);
+          if (userLoc) {
+            setActiveLocation({ id: userLoc.id, name: userLoc.name });
+            return;
+          }
+        }
+
         // Si no hay sucursal activa seleccionada, seleccionar la primera
         if (!activeLocation && active.length > 0) {
           setActiveLocation({ id: active[0].id, name: active[0].name });
         }
       })
       .catch(console.error);
-  }, [session?.tenantId]);
+  }, [session?.tenantId, session?.locationId]);
 
   // Cerrar dropdown al hacer clic fuera
   useEffect(() => {
@@ -42,27 +54,33 @@ export function LocationSelector({ isSidebar = false }: { isSidebar?: boolean })
   return (
     <div ref={ref} className="relative w-full">
       <button
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          if (!isLockedToBranch) setOpen((v) => !v);
+        }}
+        disabled={isLockedToBranch}
         className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl border transition-all text-xs font-[Outfit] shadow-xs ${
           isSidebar
             ? "border-[#38463F] bg-[#1E2622] text-[#E7E3DA] hover:bg-[#2A342F]"
             : "border-[#C9C4B8] bg-white text-[#26302B] hover:bg-[#F0EDE6]"
-        }`}
-        title="Cambiar sucursal activa"
+        } ${isLockedToBranch ? "cursor-default opacity-90" : ""}`}
+        title={isLockedToBranch ? "Sucursal asignada fija" : "Cambiar sucursal activa"}
       >
         <div className="flex items-center gap-2 min-w-0">
           <MapPin className={`w-3.5 h-3.5 shrink-0 ${isSidebar ? "text-[#8FA393]" : "text-[#556B5D]"}`} />
           <div className="flex flex-col text-left min-w-0">
             <span className={`text-[10px] uppercase font-semibold tracking-wider ${isSidebar ? "text-[#8FA393]" : "text-[#8FA393]"}`}>
-              Sucursal Activa
+              {isLockedToBranch ? "Tu Sucursal Asignada" : "Sucursal Activa"}
             </span>
             <span className="truncate font-bold">
               {activeLocation?.name || "Seleccionar..."}
             </span>
           </div>
         </div>
-        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSidebar ? "text-[#8FA393]" : "text-[#8FA393]"} ${open ? "rotate-180" : ""}`} />
+        {!isLockedToBranch && (
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isSidebar ? "text-[#8FA393]" : "text-[#8FA393]"} ${open ? "rotate-180" : ""}`} />
+        )}
       </button>
+
 
       {open && (
         <div className={`absolute bottom-full left-0 mb-2 w-full rounded-xl shadow-xl z-50 overflow-hidden py-1 border font-[Outfit] ${

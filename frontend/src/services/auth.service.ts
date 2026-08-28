@@ -22,6 +22,7 @@ export interface AuthSessionData {
   fullName: string;
   email: string;
   role: UserRole;
+  locationId?: string | null;
   companyName: string;
   tenantSlug: string;
   logoUrl?: string | null;
@@ -173,7 +174,7 @@ export const authService = {
 
     const { data: profile, error: profileError } = await supabase
       .from("user_profiles")
-      .select("tenant_id, full_name, role, is_active, tenants(name, slug, logo_url, rfc, phone, email, address, whatsapp)")
+      .select("tenant_id, full_name, role, location_id, is_active, tenants(name, slug, logo_url, rfc, phone, email, address, whatsapp)")
       .eq("id", user.id)
       .single();
 
@@ -193,9 +194,11 @@ export const authService = {
       fullName: profile.full_name,
       email: user.email || "",
       role: profile.role as UserRole,
+      locationId: profile.location_id || null,
       companyName: tenantObj?.name || "Empresa",
       tenantSlug: tenantObj?.slug || "",
       logoUrl: tenantObj?.logo_url || null,
     };
   },
 };
+
