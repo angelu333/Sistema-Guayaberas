@@ -173,6 +173,7 @@ export const quotesService = {
         valid_days,
         notes,
         created_at,
+        tenants(name, phone, email, address, rfc, logo_url),
         detalle_cotizaciones(
           id,
           variant_id,
@@ -198,39 +199,50 @@ export const quotesService = {
       return [];
     }
 
-    return data.map((r: any) => ({
-      id: r.id,
-      tenantId: r.tenant_id,
-      quoteNumber: r.quote_number,
-      clientId: r.client_id || null,
-      clientName: r.client_name,
-      clientPhone: r.client_phone || null,
-      status: r.status,
-      totalPieces: r.total_pieces,
-      subtotal: Number(r.subtotal || 0),
-      discountAmount: Number(r.discount_amount || 0),
-      totalAmount: Number(r.total_amount || 0),
-      validDays: r.valid_days,
-      notes: r.notes || null,
-      createdAt: r.created_at,
-      details: (r.detalle_cotizaciones || []).map((d: any) => {
-        const v = d.variantes_producto;
-        return {
-          id: d.id,
-          variantId: d.variant_id,
-          sku: v?.sku || "S/SKU",
-          productName: v?.productos?.name || "Guayabera",
-          colorName: v?.colores?.name || null,
-          sizeName: v?.tallas?.name || null,
-          sleeveTypeName: v?.tipos_manga?.name || null,
-          quantity: d.quantity,
-          unitPrice: Number(d.unit_price || 0),
-          discountPercent: Number(d.discount_percent || 0),
-          finalUnitPrice: Number(d.final_unit_price || 0),
-          subtotal: Number(d.subtotal || 0),
-        };
-      }),
-    }));
+    return data.map((r: any) => {
+      const t = Array.isArray(r.tenants) ? r.tenants[0] : r.tenants;
+      return {
+        id: r.id,
+        tenantId: r.tenant_id,
+        quoteNumber: r.quote_number,
+        clientId: r.client_id || null,
+        clientName: r.client_name,
+        clientPhone: r.client_phone || null,
+        status: r.status,
+        totalPieces: r.total_pieces,
+        subtotal: Number(r.subtotal || 0),
+        discountAmount: Number(r.discount_amount || 0),
+        totalAmount: Number(r.total_amount || 0),
+        validDays: r.valid_days,
+        notes: r.notes || null,
+        createdAt: r.created_at,
+        tenantInfo: {
+          name: (t as any)?.name || "Guayaberas Ábito & Montejo",
+          phone: (t as any)?.phone || null,
+          email: (t as any)?.email || null,
+          address: (t as any)?.address || null,
+          rfc: (t as any)?.rfc || null,
+          logoUrl: (t as any)?.logo_url || null,
+        },
+        details: (r.detalle_cotizaciones || []).map((d: any) => {
+          const v = d.variantes_producto;
+          return {
+            id: d.id,
+            variantId: d.variant_id,
+            sku: v?.sku || "S/SKU",
+            productName: v?.productos?.name || "Guayabera",
+            colorName: v?.colores?.name || null,
+            sizeName: v?.tallas?.name || null,
+            sleeveTypeName: v?.tipos_manga?.name || null,
+            quantity: d.quantity,
+            unitPrice: Number(d.unit_price || 0),
+            discountPercent: Number(d.discount_percent || 0),
+            finalUnitPrice: Number(d.final_unit_price || 0),
+            subtotal: Number(d.subtotal || 0),
+          };
+        }),
+      };
+    });
   },
 
   /**
@@ -554,6 +566,21 @@ export const quotesService = {
       .from("cotizaciones")
       .update({ status })
       .eq("id", quoteId);
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  },
+
+  /**
+   * Elimina una cotización y sus detalles de la base de datos
+   */
+  async deleteQuote(quoteId: string): Promise<{ success: boolean; error?: string }> {
+    await supabase.from("detalle_cotizaciones").delete().eq("quote_id", quoteId);
+
+    const { error } = await supabase.from("cotizaciones").delete().eq("id", quoteId);
 
     if (error) {
       return { success: false, error: error.message };

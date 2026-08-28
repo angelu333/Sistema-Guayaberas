@@ -22,6 +22,7 @@ import {
   ShoppingCart,
   Receipt,
   Edit,
+  Trash2,
   XCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -40,6 +41,8 @@ import {
 import { NewQuoteModal } from "@/components/cotizaciones/NewQuoteModal";
 import { QuotePreviewModal } from "@/components/cotizaciones/QuotePreviewModal";
 import { QuoteEditModal } from "@/components/cotizaciones/QuoteEditModal";
+import { ConvertQuoteModal } from "@/components/cotizaciones/ConvertQuoteModal";
+import { DeleteQuoteModal } from "@/components/cotizaciones/DeleteQuoteModal";
 import { WholesaleTierModal } from "@/components/cotizaciones/WholesaleTierModal";
 
 export default function VentasYCotizacionesPage() {
@@ -70,11 +73,13 @@ export default function VentasYCotizacionesPage() {
   const [quotes, setQuotes] = useState<QuoteRecord[]>([]);
   const [tiers, setTiers] = useState<WholesaleTier[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [isNewQuoteModalOpen, setIsNewQuoteModalOpen] = useState(false);
   const [isTierModalOpen, setIsTierModalOpen] = useState(false);
   const [previewQuote, setPreviewQuote] = useState<QuoteRecord | null>(null);
   const [editingQuote, setEditingQuote] = useState<QuoteRecord | null>(null);
+  const [convertingQuote, setConvertingQuote] = useState<QuoteRecord | null>(null);
+  const [deletingQuote, setDeletingQuote] = useState<QuoteRecord | null>(null);
 
   const loadSalesData = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -128,6 +133,9 @@ export default function VentasYCotizacionesPage() {
   });
 
   const filteredQuotes = quotes.filter((q) => {
+    if (statusFilter === "pending") {
+      return q.status === "draft" || q.status === "sent" || q.status === "accepted";
+    }
     if (statusFilter === "all") return true;
     return q.status === statusFilter;
   });
@@ -152,26 +160,6 @@ export default function VentasYCotizacionesPage() {
     );
     if (res.success) {
       loadQuotesData();
-    }
-  };
-
-  const handleConvertToSale = async (quote: QuoteRecord) => {
-    if (
-      !confirm(
-        `¿Deseas convertir la Cotización #${quote.quoteNumber} en una Venta Oficial por $${quote.totalAmount.toFixed(
-          2
-        )} MXN? Se descontarán los artículos del inventario.`
-      )
-    ) {
-      return;
-    }
-
-    const res = await quotesService.convertQuoteToSale(quote.id, session?.userId);
-    if (res.success) {
-      alert(`¡Venta registrada exitosamente! Ticket #${res.ticketNumber}`);
-      loadQuotesData();
-    } else {
-      alert(`Error al registrar la venta: ${res.error}`);
     }
   };
 
@@ -240,6 +228,7 @@ export default function VentasYCotizacionesPage() {
     }
   };
 
+  const pendingCount = quotes.filter((q) => q.status === "draft" || q.status === "sent" || q.status === "accepted").length;
   const acceptedCount = quotes.filter((q) => q.status === "accepted").length;
   const totalAmountCotizado = quotes.reduce((acc, q) => acc + q.totalAmount, 0);
 
@@ -299,9 +288,9 @@ export default function VentasYCotizacionesPage() {
         >
           <FileText className="w-4 h-4" />
           Cotizaciones de Mayoreo
-          {quotes.length > 0 && (
-            <span className="ml-1 bg-[#EDE7DA] text-[#556B5D] text-xs font-mono px-2 py-0.5 rounded-full">
-              {quotes.length}
+          {pendingCount > 0 && (
+            <span className="ml-1 bg-[#EDE7DA] text-[#556B5D] text-xs font-mono px-2 py-0.5 rounded-full font-bold">
+              {pendingCount}
             </span>
           )}
         </button>
@@ -492,14 +481,14 @@ export default function VentasYCotizacionesPage() {
             <Card padding="md" className="border-l-4 border-l-[#556B5D]">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
-                  Cotizaciones Registradas
+                  Cotizaciones Pendientes
                 </span>
                 <div className="p-2 bg-[#EBF0EC] text-[#556B5D] rounded-xl">
                   <FileText className="w-4 h-4" />
                 </div>
               </div>
               <p className="text-2xl font-bold text-[#26302B] mt-1 font-[Outfit]">
-                {loadingQuotes ? "..." : quotes.length}
+                {loadingQuotes ? "..." : pendingCount}
               </p>
             </Card>
 
@@ -532,21 +521,22 @@ export default function VentasYCotizacionesPage() {
             </Card>
           </div>
 
+          {/* Selector de Pestañas de Estado */}
           <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-xl border border-[#DDD9D0]">
-            <span className="text-xs font-bold text-[#6B7A71] px-2 uppercase tracking-wider">Estado:</span>
+            <span className="text-xs font-bold text-[#6B7A71] px-2 uppercase tracking-wider">Filtrar por:</span>
             {[
-              { id: "all", label: "Todas" },
-              { id: "sent", label: "Enviadas / Pendientes" },
+              { id: "pending", label: "Pendientes / En Cola" },
               { id: "accepted", label: "Aceptadas" },
-              { id: "rejected", label: "Rechazadas / No Finalizadas" },
               { id: "converted", label: "Convertidas a Venta" },
+              { id: "rejected", label: "Rechazadas / No Finalizadas" },
+              { id: "all", label: "Histórico Completo" },
             ].map((st) => (
               <button
                 key={st.id}
                 onClick={() => setStatusFilter(st.id)}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors ${
                   statusFilter === st.id
-                    ? "bg-[#556B5D] text-white"
+                    ? "bg-[#556B5D] text-white shadow-xs"
                     : "bg-[#F8F6F1] text-[#6B7A71] hover:text-[#26302B]"
                 }`}
               >
@@ -608,10 +598,20 @@ export default function VentasYCotizacionesPage() {
                             </Button>
 
                             {q.status !== "converted" && (
-                              <Button size="sm" onClick={() => handleConvertToSale(q)} className="bg-[#3F7D58] text-xs py-1 text-white font-bold">
+                              <Button size="sm" onClick={() => setConvertingQuote(q)} className="bg-[#3F7D58] text-xs py-1 text-white font-bold">
                                 <ShoppingCart className="w-3.5 h-3.5 mr-1" /> Vender
                               </Button>
                             )}
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setDeletingQuote(q)}
+                              className="text-[#B85450] hover:bg-[#FEF5F5] border-[#F5CACA]"
+                              title="Eliminar Cotización"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -646,6 +646,21 @@ export default function VentasYCotizacionesPage() {
         tenantId={effectiveTenantId || ""}
         tiers={tiers}
         onQuoteUpdated={loadQuotesData}
+      />
+
+      <ConvertQuoteModal
+        isOpen={!!convertingQuote}
+        onClose={() => setConvertingQuote(null)}
+        quote={convertingQuote}
+        userId={session?.userId}
+        onConverted={() => loadQuotesData()}
+      />
+
+      <DeleteQuoteModal
+        isOpen={!!deletingQuote}
+        onClose={() => setDeletingQuote(null)}
+        quote={deletingQuote}
+        onDeleted={() => loadQuotesData()}
       />
 
       <WholesaleTierModal
