@@ -169,36 +169,47 @@ export const authService = {
   async getCurrentSession(): Promise<AuthSessionData | null> {
     const supabase = createClient();
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
+    try {
+      // Timeout de protección de 3.5s para llamadas de auth en el navegador
+      const userPromise = supabase.auth.getUser();
+      const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
+        setTimeout(() => resolve({ data: { user: null } }), 3500)
+      );
 
-    const { data: profile, error: profileError } = await supabase
-      .from("user_profiles")
-      .select("tenant_id, full_name, role, location_id, is_active, tenants(name, slug, logo_url, rfc, phone, email, address, whatsapp)")
-      .eq("id", user.id)
-      .single();
+      const { data: { user } } = await Promise.race([userPromise, timeoutPromise]);
+      if (!user) return null;
 
-    if (profileError || !profile || !profile.is_active) {
+      const { data: profile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("tenant_id, full_name, role, location_id, is_active, tenants(name, slug, logo_url, rfc, phone, email, address, whatsapp)")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || !profile || !profile.is_active) {
+        return null;
+      }
+
+      const tenantObj = profile.tenants as unknown as {
+        name: string;
+        slug: string;
+        logo_url?: string | null;
+      } | null;
+
+      return {
+        userId: user.id,
+        tenantId: profile.tenant_id,
+        fullName: profile.full_name,
+        email: user.email || "",
+        role: profile.role as UserRole,
+        locationId: profile.location_id || null,
+        companyName: tenantObj?.name || "Empresa",
+        tenantSlug: tenantObj?.slug || "",
+        logoUrl: tenantObj?.logo_url || null,
+      };
+    } catch (err) {
+      console.warn("[AuthService] Error o timeout en getCurrentSession:", err);
       return null;
     }
-
-    const tenantObj = profile.tenants as unknown as {
-      name: string;
-      slug: string;
-      logo_url?: string | null;
-    } | null;
-
-    return {
-      userId: user.id,
-      tenantId: profile.tenant_id,
-      fullName: profile.full_name,
-      email: user.email || "",
-      role: profile.role as UserRole,
-      locationId: profile.location_id || null,
-      companyName: tenantObj?.name || "Empresa",
-      tenantSlug: tenantObj?.slug || "",
-      logoUrl: tenantObj?.logo_url || null,
-    };
   },
 };
 

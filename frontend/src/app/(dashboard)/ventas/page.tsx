@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Fragment } from "react";
+import { useEffect, useState, useCallback, Fragment, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Search,
@@ -54,7 +54,7 @@ import { DeleteQuoteModal } from "@/components/cotizaciones/DeleteQuoteModal";
 import { WholesaleTierModal } from "@/components/cotizaciones/WholesaleTierModal";
 import { locationsService, type LocationDetail } from "@/services/locations.service";
 
-export default function VentasYCotizacionesPage() {
+function VentasYCotizacionesContent() {
   const { tenant } = useTenantStore();
   const { session } = useAuthStore();
   const effectiveTenantId = tenant?.id || session?.tenantId;
@@ -882,5 +882,19 @@ export default function VentasYCotizacionesPage() {
         onTiersUpdated={loadQuotesData}
       />
     </div>
+  );
+}
+
+export default function VentasYCotizacionesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="w-8 h-8 border-3 border-[#556B5D] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <VentasYCotizacionesContent />
+    </Suspense>
   );
 }

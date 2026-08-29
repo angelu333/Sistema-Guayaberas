@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Building2,
@@ -752,7 +752,7 @@ function UserAccountModal({
 // ==========================================
 // PÁGINA CONSOLIDADA DE SUCURSALES, TRASPASOS Y USUARIOS
 // ==========================================
-export default function SucursalesUnificadasPage() {
+function SucursalesUnificadasContent() {
   const session = useAuthStore((s) => s.session);
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -1322,6 +1322,20 @@ export default function SucursalesUnificadasPage() {
         />
       )}
     </div>
+  );
+}
+
+export default function SucursalesUnificadasPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="w-8 h-8 border-3 border-[#556B5D] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <SucursalesUnificadasContent />
+    </Suspense>
   );
 }
 

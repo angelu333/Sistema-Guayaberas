@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Package,
@@ -39,7 +39,7 @@ import { formatCurrency } from "@/lib/utils/formatters";
 
 type ActiveTab = "existencias" | "productos" | "historial" | "alertas";
 
-export default function InventarioYProductosPage() {
+function InventarioYProductosContent() {
   const { tenant } = useTenantStore();
   const { session } = useAuthStore();
   const effectiveTenantId = tenant?.id || session?.tenantId;
@@ -514,5 +514,19 @@ export default function InventarioYProductosPage() {
         onSuccess={() => { loadProductsData(); loadInventoryData(); }}
       />
     </div>
+  );
+}
+
+export default function InventarioYProductosPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-[400px]">
+          <div className="w-8 h-8 border-3 border-[#556B5D] border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <InventarioYProductosContent />
+    </Suspense>
   );
 }

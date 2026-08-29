@@ -20,7 +20,8 @@ export default function DashboardLayout({
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
   const setTenant = useTenantStore((state) => state.setTenant);
-  const [checkingAuth, setCheckingAuth] = useState(!session);
+  // Si ya tenemos sesión persistida, no bloquear la pantalla con spinner
+  const [checkingAuth, setCheckingAuth] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -77,12 +78,13 @@ export default function DashboardLayout({
               router.push("/produccion");
             }
           }
-        } else {
+        } else if (!session) {
+          // Si no hay sesión ni local ni remota, redirigir al login
           router.push("/login");
         }
       } catch (err) {
         console.error("Error al verificar autenticación:", err);
-        if (isMounted) router.push("/login");
+        if (!session && isMounted) router.push("/login");
       } finally {
         if (isMounted) setCheckingAuth(false);
       }
@@ -93,7 +95,7 @@ export default function DashboardLayout({
     return () => {
       isMounted = false;
     };
-  }, [pathname]);
+  }, []);
 
 
   if (checkingAuth && !session) {
