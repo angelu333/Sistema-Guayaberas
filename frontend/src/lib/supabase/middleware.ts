@@ -18,50 +18,67 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // 2. Para las demás rutas (Dashboard, POS, Inventario, etc.), verificar sesión con Supabase
+  // 2. Si faltan variables de entorno en el servidor, permitir la navegación básica sin congelar
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    console.warn("[Middleware] Faltan variables de entorno NEXT_PUBLIC_SUPABASE_URL o ANON_KEY");
+    return NextResponse.next({ request });
+  }
+
+  // 3. Para las demás rutas (Dashboard, POS, Inventario, etc.), verificar sesión con Supabase
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
+  try {
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll();
+          },
+          setAll(cookiesToSet) {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            );
+            supabaseResponse = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          },
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
+      }
+    );
+
+    const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+
+    // Timeout de protección de 2.5 segundos para evitar bloqueos en Edge functions
+    const userPromise = supabase.auth.getUser();
+    const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
+      setTimeout(() => resolve({ data: { user: null } }), 2500)
+    );
+
+    const {
+      data: { user },
+    } = await Promise.race([userPromise, timeoutPromise]);
+
+    // Si no hay sesión y la ruta no es de auth, redirigir al login
+    if (!user && !isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
     }
-  );
 
-  const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
+    // Si hay sesión y está en el login, redirigir al dashboard
+    if (user && isAuthRoute) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/dashboard";
+      return NextResponse.redirect(url);
+    }
 
-  // Refrescar la sesion del usuario
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Si no hay sesion y la ruta no es de auth, redirigir al login
-  if (!user && !isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
+    return supabaseResponse;
+  } catch (err) {
+    console.error("[Middleware] Error verificando sesión:", err);
+    return supabaseResponse;
   }
-
-  // Si hay sesion y esta en el login, redirigir al dashboard
-  if (user && isAuthRoute) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
-    return NextResponse.redirect(url);
-  }
-
-  return supabaseResponse;
 }
+
