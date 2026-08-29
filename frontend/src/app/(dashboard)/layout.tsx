@@ -24,6 +24,12 @@ export default function DashboardLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
+    // Si ya tenemos sesión en el store, no volver a verificar — evita llamada extra a Supabase en cada navegación
+    if (session) {
+      setCheckingAuth(false);
+      return;
+    }
+
     let isMounted = true;
 
     async function verifyAuth() {
@@ -47,7 +53,7 @@ export default function DashboardLayout({
             createdAt: "",
           });
 
-          // Control de acceso por rol (RBAC)
+          // Control de acceso por rol (RBAC) — solo en el primer montaje
           const role = currentSession.role;
           if (role === "seller") {
             const adminOnlyPaths = [
@@ -93,7 +99,9 @@ export default function DashboardLayout({
     return () => {
       isMounted = false;
     };
-  }, [pathname]);
+  // Solo se ejecuta cuando no hay sesión (primera carga). Pathname solo se usa internamente, no como dep.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   if (checkingAuth && !session) {

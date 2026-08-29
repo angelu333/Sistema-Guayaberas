@@ -51,15 +51,9 @@ export async function updateSession(request: NextRequest) {
 
     const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
 
-    // Timeout de protección de 2.5 segundos para evitar bloqueos en Edge functions
-    const userPromise = supabase.auth.getUser();
-    const timeoutPromise = new Promise<{ data: { user: null } }>((resolve) =>
-      setTimeout(() => resolve({ data: { user: null } }), 2500)
-    );
-
-    const {
-      data: { user },
-    } = await Promise.race([userPromise, timeoutPromise]);
+    // getSession() lee de la cookie local — sin llamada de red, instantáneo
+    const { data: { session } } = await supabase.auth.getSession();
+    const user = session?.user ?? null;
 
     // Si no hay sesión y la ruta no es de auth, redirigir al login
     if (!user && !isAuthRoute) {
