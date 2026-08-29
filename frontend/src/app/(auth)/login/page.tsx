@@ -25,7 +25,7 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const router = useRouter();
+  const router = Router();
   const setSession = useAuthStore((state) => state.setSession);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -42,7 +42,7 @@ export default function LoginPage() {
     try {
       const session = await authService.login(data);
       setSession(session);
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErrorMsg(err.message);
