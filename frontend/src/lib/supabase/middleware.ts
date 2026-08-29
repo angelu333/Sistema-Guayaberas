@@ -1,11 +1,10 @@
 // Utilidad para actualizar la sesion en el middleware de Next.js
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  // 1. Rutas 100% públicas que NO deben esperar llamadas de red de autenticación
+  // 1. Rutas públicas que NO requieren autenticación
   const isPublicRoute =
     pathname.startsWith("/catalogo") ||
     pathname.startsWith("/cotizacion") ||
@@ -18,50 +17,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
-  // 2. Para las demás rutas (Dashboard, POS, Inventario, etc.), verificar sesión con Supabase
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
   const isAuthRoute = pathname.startsWith("/login") || pathname.startsWith("/register");
 
-  // Refrescar la sesion del usuario
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // 2. Comprobar presencia de token de sesión en las cookies de Supabase (0ms, sin peticiones de red)
+  const allCookies = request.cookies.getAll();
+  const hasAuthCookie = allCookies.some(
+    (c) => (c.name.includes("-auth-token") || c.name.startsWith("sb-")) && c.value && c.value !== "[]" && c.value !== '""'
+  );
 
-  // Si no hay sesion y la ruta no es de auth, redirigir al login
-  if (!user && !isAuthRoute) {
+  // 3. Si no tiene cookie y quiere entrar a una ruta protegida -> /login
+  if (!hasAuthCookie && !isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // Si hay sesion y esta en el login, redirigir al dashboard
-  if (user && isAuthRoute) {
+  // 4. Si ya tiene cookie y está en /login o /register -> /dashboard
+  if (hasAuthCookie && isAuthRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
-  return supabaseResponse;
+  return NextResponse.next({ request });
 }
+
