@@ -15,11 +15,12 @@ import {
   Minus,
   ShoppingBag,
   CheckCircle,
+  ZoomIn,
 } from "lucide-react";
 import type { PublicProductView } from "@/services/public-catalog.service";
 import type { PublicCartItem } from "@/components/catalogo/PublicCartDrawer";
 import { formatWhatsAppPhone } from "@/lib/utils/formatters";
-
+import { ImageZoomModal } from "@/components/catalogo/ImageZoomModal";
 
 interface ProductDetailModalProps {
   isOpen: boolean;
@@ -44,6 +45,8 @@ export function ProductDetailModal({
   const [quantity, setQuantity] = useState(1);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [addedSuccess, setAddedSuccess] = useState(false);
+  const [isZoomOpen, setIsZoomOpen] = useState(false);
+
 
   useEffect(() => {
     if (isOpen && product) {
@@ -188,18 +191,22 @@ export function ProductDetailModal({
           <X className="w-5 h-5" />
         </button>
 
-        {/* LADO IZQUIERDO: Galería de Fotos */}
+        {/* LADO IZQUIERDO: Galería de Fotos con Botón de Zoom */}
         <div
           className="w-full md:w-[45%] flex flex-col shrink-0"
           style={{ backgroundColor: "#F5EFE3" }}
         >
-          {/* Foto principal adaptable */}
-          <div className="relative w-full h-[280px] sm:h-[340px] md:h-full md:min-h-[380px] overflow-hidden">
+          {/* Foto principal adaptable con zoom interactivo */}
+          <div
+            onClick={() => { if (images.length > 0) setIsZoomOpen(true); }}
+            className="relative w-full h-[300px] sm:h-[360px] md:h-full md:min-h-[400px] overflow-hidden group/img cursor-zoom-in"
+            title="Toca o haz clic para ver los bordados en detalle (Zoom)"
+          >
             {images.length > 0 ? (
               <img
                 src={images[activeImageIndex]}
                 alt={product.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover object-top transition-transform duration-500 group-hover/img:scale-105"
               />
             ) : (
               <div
@@ -211,20 +218,38 @@ export function ProductDetailModal({
               </div>
             )}
 
+            {/* Badge Flotante "Ver Bordados (Zoom)" */}
+            {images.length > 0 && (
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
+                <span
+                  className="px-3.5 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-xl backdrop-blur-md text-white transition-all group-hover/img:scale-105"
+                  style={{
+                    backgroundColor: "rgba(38, 48, 43, 0.85)",
+                    border: "1px solid rgba(196, 154, 90, 0.6)",
+                  }}
+                >
+                  <ZoomIn className="w-3.5 h-3.5 text-[#C49A5A]" />
+                  <span>Ver Bordados (Zoom)</span>
+                </span>
+              </div>
+            )}
+
             {/* Flechas de navegación */}
             {images.length > 1 && (
               <>
                 <button
-                  onClick={handlePrevImage}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 z-10"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
+                  title="Foto anterior"
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
                 <button
-                  onClick={handleNextImage}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105"
+                  onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 z-10"
                   style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
+                  title="Foto siguiente"
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
@@ -232,6 +257,7 @@ export function ProductDetailModal({
             )}
           </div>
         </div>
+
 
         {/* LADO DERECHO: Detalle y Pedido */}
         <div className="flex-1 flex flex-col md:overflow-y-auto min-w-0">
@@ -511,6 +537,16 @@ export function ProductDetailModal({
           </div>
         </div>
       </div>
+
+      {/* Visor de Zoom en Alta Definición para Bordados */}
+      <ImageZoomModal
+        isOpen={isZoomOpen}
+        onClose={() => setIsZoomOpen(false)}
+        images={images}
+        initialIndex={activeImageIndex}
+        productName={product.name}
+      />
     </div>
   );
 }
+
