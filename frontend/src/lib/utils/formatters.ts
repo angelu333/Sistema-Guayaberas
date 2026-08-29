@@ -1,4 +1,4 @@
-﻿// Funciones de formato para presentacion de datos
+// Funciones de formato para presentacion de datos
 
 /**
  * Formatea un numero como moneda en pesos mexicanos
@@ -56,3 +56,20 @@ export function truncateText(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength).trimEnd()}...`;
 }
+
+/**
+ * Limpia y formatea un número para el estándar internacional de WhatsApp (wa.me)
+ * Si el número tiene 10 dígitos (estándar México), antepone automáticamente '52'.
+ */
+export function formatWhatsAppPhone(phone: string): string {
+  if (!phone) return "";
+  let digits = phone.replace(/\D/g, "");
+  // Si tiene 10 dígitos (ej. 9994962120), anteponer código México (52)
+  if (digits.length === 10) {
+    digits = `52${digits}`;
+  } else if (digits.length === 11 && digits.startsWith("1")) {
+    digits = `52${digits.slice(1)}`;
+  }
+  return digits;
+}
+

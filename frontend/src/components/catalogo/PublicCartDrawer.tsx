@@ -12,6 +12,8 @@ import {
   Shirt,
 } from "lucide-react";
 import { quotesService } from "@/services/quotes.service";
+import { formatWhatsAppPhone } from "@/lib/utils/formatters";
+
 
 export interface PublicCartItem {
   cartItemId: string;
@@ -112,8 +114,9 @@ export function PublicCartDrawer({
 
     setSending(false);
 
+    const cleanPhone = formatWhatsAppPhone(phone);
     window.open(
-      `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
+      `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`,
       "_blank"
     );
   };

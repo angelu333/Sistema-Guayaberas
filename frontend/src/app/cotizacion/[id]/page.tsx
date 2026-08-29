@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { quotesService, type QuoteRecord, type WholesaleTier } from "@/services/quotes.service";
+import { formatWhatsAppPhone } from "@/lib/utils/formatters";
+
 
 export default function PublicClientQuotePage() {
   const params = useParams();
@@ -101,12 +103,14 @@ export default function PublicClientQuotePage() {
 
   // Enviar a WhatsApp
   const handleConfirmWhatsApp = () => {
-    const tenantPhone = quote.tenantInfo?.phone || "529991234567";
+    const rawPhone = quote.tenantInfo?.phone || "529991234567";
+    const tenantPhone = formatWhatsAppPhone(rawPhone);
     const text = `¡Hola! Confirmo mi cotización #${quote.quoteNumber} para ${quote.clientName}. Total: ${quote.totalPieces} guayaberas por $${quote.totalAmount.toFixed(
       2
     )} MXN. ¿Cuáles son los pasos para realizar el pedido?`;
-    window.open(`https://wa.me/${tenantPhone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank");
+    window.open(`https://wa.me/${tenantPhone}?text=${encodeURIComponent(text)}`, "_blank");
   };
+
 
   const validUntilDate = new Date(
     new Date(quote.createdAt).getTime() + quote.validDays * 24 * 60 * 60 * 1000

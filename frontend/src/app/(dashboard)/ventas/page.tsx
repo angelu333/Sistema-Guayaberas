@@ -28,6 +28,8 @@ import {
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { formatWhatsAppPhone } from "@/lib/utils/formatters";
+
 import { Input } from "@/components/ui/Input";
 import { useTenantStore } from "@/stores/tenant.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -164,7 +166,7 @@ export default function VentasYCotizacionesPage() {
   };
 
   const handleCopyWhatsAppLink = (quote: QuoteRecord) => {
-    const phone = quote.clientPhone ? quote.clientPhone.replace(/\D/g, "") : "";
+    const phone = quote.clientPhone ? formatWhatsAppPhone(quote.clientPhone) : "";
     const itemsText = quote.details
       .map(
         (d) =>
@@ -185,6 +187,7 @@ export default function VentasYCotizacionesPage() {
       alert("¡Texto de cotización copiado al portapapeles!");
     }
   };
+
 
   const methodLabel = (m: string) => {
     switch (m) {

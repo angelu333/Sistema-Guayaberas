@@ -18,6 +18,8 @@ import {
 } from "lucide-react";
 import type { PublicProductView } from "@/services/public-catalog.service";
 import type { PublicCartItem } from "@/components/catalogo/PublicCartDrawer";
+import { formatWhatsAppPhone } from "@/lib/utils/formatters";
+
 
 interface ProductDetailModalProps {
   isOpen: boolean;
@@ -119,20 +121,22 @@ export function ProductDetailModal({
     setActiveImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
+
   const handleAddToCartClick = () => {
-    if (!onAddToCart || isOutOfStock) return;
-    const cartItem: PublicCartItem = {
+    if (!onAddToCart || !matchingVariant || isOutOfStock) return;
+
+    onAddToCart({
       cartItemId: `${product.productId}-${currentColor}-${currentSize}`,
       productId: product.productId,
-      variantId: matchingVariant?.variantId || product.productId,
+      variantId: matchingVariant.variantId,
       productName: product.name,
       colorName: currentColor,
       sizeName: currentSize,
       unitPrice: finalPrice,
-      quantity: quantity,
+      quantity,
       imageUrl: images[0] || product.imageUrl || null,
-    };
-    onAddToCart(cartItem);
+    });
+
     setAddedSuccess(true);
     setTimeout(() => {
       setAddedSuccess(false);
@@ -140,8 +144,10 @@ export function ProductDetailModal({
     }, 1200);
   };
 
+
   const handleSendWhatsApp = () => {
-    const phone = tenantWhatsapp || "";
+    const rawPhone = tenantWhatsapp || "";
+    const phone = formatWhatsAppPhone(rawPhone);
     if (!phone) {
       alert("No hay número de WhatsApp registrado.");
       return;
@@ -157,7 +163,7 @@ export function ProductDetailModal({
       `¿Tienen disponibilidad? ¿Hacen envíos?`;
 
     window.open(
-      `https://wa.me/${phone.replace(/\D/g, "")}?text=${encodeURIComponent(message)}`,
+      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`,
       "_blank"
     );
   };
@@ -169,16 +175,26 @@ export function ProductDetailModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-3xl rounded-2xl overflow-hidden flex flex-col md:flex-row max-h-[92vh] relative bg-white"
+        className="w-full max-w-3xl rounded-2xl flex flex-col md:flex-row max-h-[92vh] relative bg-white overflow-y-auto md:overflow-hidden"
         style={{ boxShadow: "0 25px 60px rgba(38,48,43,0.35)" }}
       >
+        {/* Botón cerrar flotante en móvil */}
+        <button
+          onClick={onClose}
+          className="md:hidden absolute right-3 top-3 z-30 p-2 rounded-full shadow-md transition-colors"
+          style={{ color: "#26302B", backgroundColor: "rgba(255,255,255,0.9)" }}
+          title="Cerrar"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
         {/* LADO IZQUIERDO: Galería de Fotos */}
         <div
           className="w-full md:w-[45%] flex flex-col shrink-0"
           style={{ backgroundColor: "#F5EFE3" }}
         >
-          {/* Foto principal */}
-          <div className="relative flex-1 min-h-[220px] sm:min-h-[320px] overflow-hidden" style={{ aspectRatio: "3/4" }}>
+          {/* Foto principal adaptable */}
+          <div className="relative w-full h-[280px] sm:h-[340px] md:h-full md:min-h-[380px] overflow-hidden">
             {images.length > 0 ? (
               <img
                 src={images[activeImageIndex]}
@@ -212,41 +228,16 @@ export function ProductDetailModal({
                 >
                   <ChevronRight className="w-5 h-5" />
                 </button>
-                <span
-                  className="absolute bottom-3 right-3 text-[10px] font-bold px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: "rgba(38,48,43,0.6)", color: "white" }}
-                >
-                  {activeImageIndex + 1} / {images.length}
-                </span>
               </>
             )}
           </div>
-
-          {/* Miniaturas */}
-          {images.length > 1 && (
-            <div className="flex gap-2 p-3 overflow-x-auto">
-              {images.map((img, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setActiveImageIndex(idx)}
-                  className="w-14 h-14 rounded-xl overflow-hidden shrink-0 border-2 transition-all"
-                  style={{
-                    borderColor: activeImageIndex === idx ? "#C49A5A" : "#E4DDD1",
-                    opacity: activeImageIndex === idx ? 1 : 0.65,
-                  }}
-                >
-                  <img src={img} alt={`Vista ${idx + 1}`} className="w-full h-full object-cover" />
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* LADO DERECHO: Detalle y Pedido */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
-          {/* Header del modal */}
+        <div className="flex-1 flex flex-col md:overflow-y-auto min-w-0">
+          {/* Header del modal en desktop */}
           <div
-            className="flex items-start justify-between p-5 pb-4 border-b sticky top-0 z-10 bg-white"
+            className="hidden md:flex items-start justify-between p-5 pb-4 border-b sticky top-0 z-10 bg-white"
             style={{ borderColor: "#EDE7DA" }}
           >
             <div>
@@ -274,7 +265,25 @@ export function ProductDetailModal({
             </button>
           </div>
 
-          <div className="p-5 space-y-5 flex-1">
+          <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 flex-1">
+            {/* Header en móvil */}
+            <div className="md:hidden">
+              {product.categoryName && (
+                <span
+                  className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                  style={{ backgroundColor: "#EDE7DA", color: "#C49A5A" }}
+                >
+                  {product.categoryName}
+                </span>
+              )}
+              <h2
+                className="text-xl font-extrabold tracking-tight mt-1.5"
+                style={{ color: "#26302B" }}
+              >
+                {product.name}
+              </h2>
+            </div>
+
             {/* Precio */}
             <div>
               <span className="text-3xl font-extrabold" style={{ color: "#C49A5A" }}>
