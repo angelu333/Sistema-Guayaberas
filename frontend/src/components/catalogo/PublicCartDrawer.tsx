@@ -85,6 +85,22 @@ export function PublicCartDrawer({
 
         if (res.success && res.quoteNumber) {
           quoteNumber = res.quoteNumber;
+
+          // Notificar al administrador/vendedores via Push Web
+          try {
+            await fetch("/api/push/send-quote", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                tenantId,
+                quoteNumber: res.quoteNumber,
+                totalPieces,
+                totalAmount,
+              }),
+            });
+          } catch {
+            // La notificacion push es opcional; no detiene el flujo
+          }
         }
       } catch (err) {
         console.warn("No se pudo registrar cotización automática en Supabase:", err);

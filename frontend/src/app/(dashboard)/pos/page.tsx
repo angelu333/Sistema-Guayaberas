@@ -18,6 +18,8 @@ import {
   Printer,
   Shirt,
   Layers,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -61,6 +63,7 @@ export default function POSPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastTicket, setLastTicket] = useState<TicketData | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   // Modal de Selección Rápida de Variantes (Color, Talla, Cantidad)
   const [selectedProductForModal, setSelectedProductForModal] = useState<GroupedPOSProduct | null>(null);
@@ -678,9 +681,55 @@ export default function POSPage() {
             </div>
 
             <div className="w-full space-y-2 pt-2">
+              <Button
+                variant="outline"
+                className="w-full border-[#556B5D] text-[#556B5D] hover:bg-[#556B5D]/10"
+                onClick={async () => {
+                  if (!lastTicket) return;
+                  setDownloadingPdf(true);
+                  try {
+                    const { downloadSaleReceiptPDF } = await import("@/lib/pdf/sale-receipt-pdf");
+                    const clientObj = clients.find((c) => c.id === cart.clientId);
+                    await downloadSaleReceiptPDF(
+                      {
+                        ticketNumber: lastTicket.ticketNumber,
+                        createdAt: lastTicket.createdAt,
+                        clientName: clientObj?.fullName || "Público General",
+                        sellerName: session?.fullName || null,
+                        locationName: tenant?.name || null,
+                        subtotal: lastTicket.subtotal,
+                        discountAmount: lastTicket.discountAmount,
+                        total: lastTicket.total,
+                        items: lastTicket.items,
+                        payments: lastTicket.payments,
+                        change: lastTicket.change,
+                      },
+                      {
+                        name: tenant?.name,
+                        phone: tenant?.phone,
+                        email: tenant?.email,
+                      }
+                    );
+                  } catch (err) {
+                    console.error("Error al descargar ticket PDF:", err);
+                    alert("Error al generar PDF del ticket.");
+                  } finally {
+                    setDownloadingPdf(false);
+                  }
+                }}
+                disabled={downloadingPdf}
+              >
+                {downloadingPdf ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4 mr-1.5" />
+                )}
+                {downloadingPdf ? "Generando..." : "Descargar Recibo PDF"}
+              </Button>
+
               <Button variant="outline" className="w-full" onClick={handlePrintTicket}>
                 <Printer className="w-4 h-4 mr-1.5" />
-                Imprimir Ticket
+                Imprimir Ticket Térmico
               </Button>
               <Button className="w-full bg-[#556B5D] hover:bg-[#44564A]" onClick={handleNewSale}>
                 Nueva Venta

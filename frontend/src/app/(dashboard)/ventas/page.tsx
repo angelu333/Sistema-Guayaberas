@@ -24,6 +24,12 @@ import {
   Edit,
   Trash2,
   XCircle,
+  Download,
+  Loader2,
+  Calendar,
+  MapPin,
+  Filter,
+  X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
@@ -46,6 +52,7 @@ import { QuoteEditModal } from "@/components/cotizaciones/QuoteEditModal";
 import { ConvertQuoteModal } from "@/components/cotizaciones/ConvertQuoteModal";
 import { DeleteQuoteModal } from "@/components/cotizaciones/DeleteQuoteModal";
 import { WholesaleTierModal } from "@/components/cotizaciones/WholesaleTierModal";
+import { locationsService, type LocationDetail } from "@/services/locations.service";
 
 export default function VentasYCotizacionesPage() {
   const { tenant } = useTenantStore();
@@ -64,6 +71,12 @@ export default function VentasYCotizacionesPage() {
   const [loadingSales, setLoadingSales] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [downloadingSaleId, setDownloadingSaleId] = useState<string | null>(null);
+  const [locations, setLocations] = useState<LocationDetail[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<string>("all");
+  const [datePreset, setDatePreset] = useState<"all" | "today" | "yesterday" | "week" | "month" | "custom">("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
   const [salesMetrics, setSalesMetrics] = useState({
     salesToday: 0,
     revenueToday: 0,
@@ -86,13 +99,20 @@ export default function VentasYCotizacionesPage() {
   const loadSalesData = useCallback(async () => {
     if (!effectiveTenantId) return;
     setLoadingSales(true);
-    const [salesData, metricsData] = await Promise.all([
-      salesService.getSalesHistory(effectiveTenantId, 100),
-      salesService.getSalesMetrics(effectiveTenantId),
-    ]);
-    setSales(salesData);
-    setSalesMetrics(metricsData);
-    setLoadingSales(false);
+    try {
+      const [salesData, metricsData, locationsData] = await Promise.all([
+        salesService.getSalesHistory(effectiveTenantId, 100),
+        salesService.getSalesMetrics(effectiveTenantId),
+        locationsService.getLocations(effectiveTenantId).catch(() => []),
+      ]);
+      setSales(salesData);
+      setSalesMetrics(metricsData);
+      setLocations(locationsData);
+    } catch (err) {
+      console.error("Error al cargar ventas y sucursales:", err);
+    } finally {
+      setLoadingSales(false);
+    }
   }, [effectiveTenantId]);
 
   const loadQuotesData = useCallback(async () => {
@@ -125,13 +145,67 @@ export default function VentasYCotizacionesPage() {
     router.replace(`/ventas?tab=${tab}`);
   };
 
+  const handleDatePresetChange = (preset: "all" | "today" | "yesterday" | "week" | "month" | "custom") => {
+    setDatePreset(preset);
+    const today = new Date().toISOString().split("T")[0];
+
+    if (preset === "all") {
+      setStartDate("");
+      setEndDate("");
+    } else if (preset === "today") {
+      setStartDate(today);
+      setEndDate(today);
+    } else if (preset === "yesterday") {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      const yStr = y.toISOString().split("T")[0];
+      setStartDate(yStr);
+      setEndDate(yStr);
+    } else if (preset === "week") {
+      const w = new Date();
+      w.setDate(w.getDate() - 7);
+      setStartDate(w.toISOString().split("T")[0]);
+      setEndDate(today);
+    } else if (preset === "month") {
+      const m = new Date();
+      setStartDate(new Date(m.getFullYear(), m.getMonth(), 1).toISOString().split("T")[0]);
+      setEndDate(today);
+    }
+  };
+
+  const handleClearFilters = () => {
+    setSearchQuery("");
+    setSelectedLocation("all");
+    setDatePreset("all");
+    setStartDate("");
+    setEndDate("");
+  };
+
+  const hasActiveFilters = searchQuery !== "" || selectedLocation !== "all" || datePreset !== "all";
+
   const filteredSales = sales.filter((s) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      s.ticketNumber.toLowerCase().includes(q) ||
-      (s.clientName && s.clientName.toLowerCase().includes(q))
-    );
+    // 1. Filtro por texto / cliente / ticket
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      const matchSearch =
+        s.ticketNumber.toLowerCase().includes(q) ||
+        (s.clientName && s.clientName.toLowerCase().includes(q));
+      if (!matchSearch) return false;
+    }
+
+    // 2. Filtro por sucursal
+    if (selectedLocation !== "all" && s.locationId !== selectedLocation) {
+      return false;
+    }
+
+    // 3. Filtro por fecha
+    if (datePreset !== "all") {
+      const saleDate = s.createdAt.split("T")[0];
+      if (startDate && saleDate < startDate) return false;
+      if (endDate && saleDate > endDate) return false;
+    }
+
+    return true;
   });
 
   const filteredQuotes = quotes.filter((q) => {
@@ -333,20 +407,107 @@ export default function VentasYCotizacionesPage() {
           </div>
 
           <Card className="overflow-hidden">
-            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1] flex items-center justify-between gap-4">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
-                <Input
-                  placeholder="Buscar por ticket o cliente..."
-                  value={searchQuery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
-                  className="pl-9 bg-white"
-                />
+            {/* Barra de Filtros Avanzados: Buscador + Sucursales + Fechas Rápidas */}
+            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1] space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+                {/* Buscador */}
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
+                  <Input
+                    placeholder="Buscar por ticket o cliente..."
+                    value={searchQuery}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
+                    className="pl-9 bg-white text-xs"
+                  />
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Selector de Sucursal */}
+                  {locations.length > 0 && (
+                    <div className="flex items-center gap-1.5 bg-white border border-[#DDD9D0] rounded-xl px-2.5 py-1.5 shadow-2xs">
+                      <MapPin className="w-3.5 h-3.5 text-[#556B5D]" />
+                      <select
+                        value={selectedLocation}
+                        onChange={(e) => setSelectedLocation(e.target.value)}
+                        className="bg-transparent text-xs font-semibold text-[#26302B] focus:outline-hidden cursor-pointer"
+                      >
+                        <option value="all">Todas las sucursales</option>
+                        {locations.map((loc) => (
+                          <option key={loc.id} value={loc.id}>
+                            {loc.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Contador de resultados */}
+                  <span className="text-xs font-semibold text-[#6B7A71] px-2 py-1 bg-white rounded-lg border border-[#DDD9D0]">
+                    {filteredSales.length} {filteredSales.length === 1 ? "venta" : "ventas"}
+                  </span>
+
+                  {hasActiveFilters && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleClearFilters}
+                      className="text-xs text-[#B85450] border-[#B85450]/30 hover:bg-[#FAEAEA]"
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Limpiar filtros
+                    </Button>
+                  )}
+                </div>
               </div>
 
-              <span className="text-xs font-semibold text-[#6B7A71]">
-                Mostrando {filteredSales.length} transacciones
-              </span>
+              {/* Filtros de Fecha Rápidos (Pills) */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-[#DDD9D0]/60">
+                <span className="text-[11px] font-bold text-[#6B7A71] mr-1 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-[#556B5D]" />
+                  Periodo:
+                </span>
+
+                {(
+                  [
+                    { id: "all", label: "Todo" },
+                    { id: "today", label: "Hoy" },
+                    { id: "yesterday", label: "Ayer" },
+                    { id: "week", label: "Esta Semana" },
+                    { id: "month", label: "Este Mes" },
+                    { id: "custom", label: "Personalizado" },
+                  ] as const
+                ).map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handleDatePresetChange(preset.id)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${
+                      datePreset === preset.id
+                        ? "bg-[#556B5D] text-white shadow-2xs"
+                        : "bg-white text-[#6B7A71] hover:text-[#26302B] border border-[#DDD9D0]"
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+
+                {datePreset === "custom" && (
+                  <div className="flex items-center gap-1.5 ml-2">
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="px-2 py-1 bg-white border border-[#DDD9D0] rounded-lg text-xs font-mono text-[#26302B]"
+                    />
+                    <span className="text-xs text-[#6B7A71]">al</span>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="px-2 py-1 bg-white border border-[#DDD9D0] rounded-lg text-xs font-mono text-[#26302B]"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -461,6 +622,53 @@ export default function VentasYCotizacionesPage() {
                                       <span>Total</span>
                                       <span>${sale.total.toFixed(2)}</span>
                                     </div>
+                                  </div>
+
+                                  {/* Botón Descargar Ticket PDF */}
+                                  <div className="pt-3 border-t border-[#DDD9D0]/60 mt-3 flex justify-end">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={async () => {
+                                        setDownloadingSaleId(sale.id);
+                                        try {
+                                          const { downloadSaleReceiptPDF } = await import("@/lib/pdf/sale-receipt-pdf");
+                                          await downloadSaleReceiptPDF(
+                                            {
+                                              ticketNumber: sale.ticketNumber,
+                                              createdAt: sale.createdAt,
+                                              clientName: sale.clientName || "Público General",
+                                              sellerName: sale.sellerName,
+                                              locationName: sale.locationName || tenant?.name || null,
+                                              subtotal: sale.subtotal,
+                                              discountAmount: sale.discountAmount,
+                                              total: sale.total,
+                                              items: sale.items,
+                                              payments: sale.payments,
+                                            },
+                                            {
+                                              name: tenant?.name,
+                                              phone: tenant?.phone,
+                                              email: tenant?.email,
+                                            }
+                                          );
+                                        } catch (err) {
+                                          console.error("Error al descargar ticket PDF:", err);
+                                          alert("Error al generar el recibo PDF.");
+                                        } finally {
+                                          setDownloadingSaleId(null);
+                                        }
+                                      }}
+                                      disabled={downloadingSaleId === sale.id}
+                                      className="text-xs bg-white hover:bg-[#556B5D]/10 text-[#556B5D] border-[#556B5D]"
+                                    >
+                                      {downloadingSaleId === sale.id ? (
+                                        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                                      ) : (
+                                        <Download className="w-3.5 h-3.5 mr-1.5" />
+                                      )}
+                                      {downloadingSaleId === sale.id ? "Generando..." : "Descargar Recibo PDF"}
+                                    </Button>
                                   </div>
                                 </div>
                               </div>

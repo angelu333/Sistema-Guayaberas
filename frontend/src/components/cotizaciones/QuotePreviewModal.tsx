@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef } from "react";
-import { X, Printer, Share2, FileText } from "lucide-react";
+import { useRef, useState } from "react";
+import { X, Download, Share2, FileText, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { QuoteRecord } from "@/services/quotes.service";
 
@@ -17,11 +17,21 @@ export function QuotePreviewModal({
   quote,
 }: QuotePreviewModalProps) {
   const printableRef = useRef<HTMLDivElement>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   if (!isOpen || !quote) return null;
 
-  const handlePrint = () => {
-    window.print();
+  const handleDownloadPDF = async () => {
+    setGeneratingPdf(true);
+    try {
+      const { downloadQuotePDF } = await import("@/lib/pdf/quote-pdf");
+      await downloadQuotePDF(quote);
+    } catch (err) {
+      console.error("Error generando PDF:", err);
+      alert("Ocurrió un error al generar el PDF. Intenta de nuevo.");
+    } finally {
+      setGeneratingPdf(false);
+    }
   };
 
   const handleCopyLink = () => {
@@ -54,9 +64,9 @@ export function QuotePreviewModal({
               <Share2 className="w-4 h-4 mr-1.5" />
               Copiar Link WhatsApp
             </Button>
-            <Button size="sm" onClick={handlePrint} className="bg-[#556B5D] hover:bg-[#44564A]">
-              <Printer className="w-4 h-4 mr-1.5" />
-              Imprimir / PDF
+            <Button size="sm" onClick={handleDownloadPDF} disabled={generatingPdf} className="bg-[#556B5D] hover:bg-[#44564A]">
+              {generatingPdf ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+              {generatingPdf ? "Generando..." : "Descargar PDF"}
             </Button>
             <button
               onClick={onClose}

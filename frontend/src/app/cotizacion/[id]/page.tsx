@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import {
   FileText,
-  Printer,
+  Download,
   Share2,
   CheckCircle,
   Plus,
@@ -12,6 +12,7 @@ import {
   Percent,
   Sparkles,
   ShoppingBag,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { quotesService, type QuoteRecord, type WholesaleTier } from "@/services/quotes.service";
@@ -27,6 +28,7 @@ export default function PublicClientQuotePage() {
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
 
   useEffect(() => {
     if (!quoteId) return;
@@ -111,6 +113,19 @@ export default function PublicClientQuotePage() {
     window.open(`https://wa.me/${tenantPhone}?text=${encodeURIComponent(text)}`, "_blank");
   };
 
+  const handleDownloadPDF = async () => {
+    setGeneratingPdf(true);
+    try {
+      const { downloadQuotePDF } = await import("@/lib/pdf/quote-pdf");
+      await downloadQuotePDF(quote);
+    } catch (err) {
+      console.error("Error generando PDF:", err);
+      alert("Ocurrió un error al generar el PDF. Intenta de nuevo.");
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
 
   const validUntilDate = new Date(
     new Date(quote.createdAt).getTime() + quote.validDays * 24 * 60 * 60 * 1000
@@ -140,11 +155,12 @@ export default function PublicClientQuotePage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.print()}
+              onClick={handleDownloadPDF}
+              disabled={generatingPdf}
               className="bg-white/10 border-white/20 text-white hover:bg-white/20 text-xs"
             >
-              <Printer className="w-4 h-4 mr-1.5" />
-              Imprimir / PDF
+              {generatingPdf ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+              {generatingPdf ? "Generando..." : "Descargar PDF"}
             </Button>
 
             <Button

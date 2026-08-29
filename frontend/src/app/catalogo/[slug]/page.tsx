@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, useMemo, use } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import {
   Phone,
@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Filter,
   SlidersHorizontal,
+  Search,
 } from "lucide-react";
 import {
   publicCatalogService,
@@ -47,6 +48,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
 
   // Estado del Carrito / Lista de Pedido Público
   const [cartItems, setCartItems] = useState<PublicCartItem[]>([]);
+  const [searchText, setSearchText] = useState("");
 
   const selectedModelo = searchParams.get("modelo") || "";
   const selectedTalla = searchParams.get("talla") || "";
@@ -120,7 +122,19 @@ function PublicCatalogContent({ slug }: { slug: string }) {
 
   const handleClearCart = () => setCartItems([]);
 
-  const hasActiveFilters = !!(selectedModelo || selectedTalla || selectedColor);
+  // Filtrado predictivo instantáneo por texto en el cliente
+  const displayedProducts = useMemo(() => {
+    if (!searchText.trim()) return groupedProducts;
+    const q = searchText.toLowerCase().trim();
+    return groupedProducts.filter((p) => {
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchCategory = p.categoryName?.toLowerCase().includes(q);
+      const matchColor = p.availableColors.some((c) => c.toLowerCase().includes(q));
+      return matchName || matchCategory || matchColor;
+    });
+  }, [groupedProducts, searchText]);
+
+  const hasActiveFilters = !!(selectedModelo || selectedTalla || selectedColor || searchText);
 
   if (!tenantInfo && !loading) {
     return (
@@ -281,20 +295,47 @@ function PublicCatalogContent({ slug }: { slug: string }) {
       </div>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          CUADRÍCULA DE PRODUCTOS
+          CUADRÍCULA DE PRODUCTOS & BUSCADOR PREDICTIVO
       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 flex-1">
+        {/* Barra de Búsqueda Predictiva en Tiempo Real */}
+        <div className="relative mb-4">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8B7D6B]" />
+          <input
+            type="text"
+            placeholder="Buscar por modelo, bordado o color (ej. Presidencial, Lino, Blanco, Azul)..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full pl-10 pr-10 py-3 text-xs sm:text-sm font-semibold rounded-2xl border bg-white text-[#26302B] placeholder:text-[#8B7D6B]/60 shadow-2xs transition-all focus:outline-hidden focus:border-[#556B5D] focus:ring-2 focus:ring-[#556B5D]/20"
+            style={{ borderColor: searchText ? "#556B5D" : "#E4DDD1" }}
+          />
+          {searchText && (
+            <button
+              onClick={() => setSearchText("")}
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 p-1 text-[#8B7D6B] hover:text-[#26302B] rounded-full hover:bg-[#FAF7F2] transition-colors"
+              title="Limpiar búsqueda"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Encabezado del listado */}
         <div className="flex items-center justify-between mb-4">
           <p className="text-xs font-semibold text-[#8B7D6B]">
             {loading
               ? "Cargando..."
-              : `${groupedProducts.length} modelo${groupedProducts.length !== 1 ? "s" : ""} disponible${groupedProducts.length !== 1 ? "s" : ""}`}
+              : `${displayedProducts.length} modelo${displayedProducts.length !== 1 ? "s" : ""} disponible${displayedProducts.length !== 1 ? "s" : ""}`}
           </p>
 
           {/* Resumen de Filtros Activos en forma de chips */}
           {hasActiveFilters && (
             <div className="flex items-center gap-1.5 flex-wrap">
+              {searchText && (
+                <span className="text-[10px] font-bold bg-[#FAF7F2] text-[#556B5D] px-2 py-0.5 rounded-md border border-[#556B5D]">
+                  Búsqueda: &ldquo;{searchText}&rdquo;
+                </span>
+              )}
               {selectedModelo && (
                 <span className="text-[10px] font-bold bg-[#EBF0EC] text-[#556B5D] px-2 py-0.5 rounded-md border border-[#A7D7B9]">
                   Modelo: {selectedModelo}
@@ -319,23 +360,28 @@ function PublicCatalogContent({ slug }: { slug: string }) {
             <div className="w-10 h-10 border-4 border-[#C49A5A] border-t-transparent rounded-full animate-spin" />
             <p className="text-xs font-semibold">Cargando guayaberas...</p>
           </div>
-        ) : groupedProducts.length === 0 ? (
+        ) : displayedProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border-2 border-dashed border-[#E4DDD1] bg-white p-8">
             <Package className="w-12 h-12 mb-3 text-[#E4DDD1]" />
-            <p className="text-base font-bold text-[#26302B]">No hay modelos con esa combinación</p>
+            <p className="text-base font-bold text-[#26302B]">No encontramos guayaberas con ese criterio</p>
             <p className="text-xs text-[#8B7D6B] mt-1 max-w-xs">
-              Prueba seleccionando otra combinación en los filtros desplegables.
+              {searchText
+                ? `No hay modelos que coincidan con "${searchText}".`
+                : "Prueba seleccionando otra combinación en los filtros desplegables."}
             </p>
             <button
-              onClick={clearAllFilters}
-              className="mt-4 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#556B5D]"
+              onClick={() => {
+                setSearchText("");
+                clearAllFilters();
+              }}
+              className="mt-4 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#556B5D] hover:bg-[#44564A] transition-colors"
             >
               Ver todos los modelos
             </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-            {groupedProducts.map((p) => {
+            {displayedProducts.map((p) => {
               const isOutOfStock = p.totalStock <= 0;
               return (
                 <div

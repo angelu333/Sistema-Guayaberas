@@ -22,6 +22,8 @@ export interface SaleRecord {
   clientId: string | null;
   clientName: string | null;
   sellerName: string | null;
+  locationId?: string | null;
+  locationName?: string | null;
   subtotal: number;
   discountAmount: number;
   total: number;
@@ -222,6 +224,7 @@ export const salesService = {
         ticket_number,
         client_id,
         seller_id,
+        location_id,
         subtotal,
         discount_amount,
         total,
@@ -230,6 +233,7 @@ export const salesService = {
         created_at,
         clientes(full_name),
         user_profiles!seller_id(full_name),
+        ubicaciones(id, name),
         detalle_ventas(
           id,
           variant_id,
@@ -266,6 +270,8 @@ export const salesService = {
       clientId: row.client_id,
       clientName: row.clientes?.full_name || null,
       sellerName: row.user_profiles?.full_name || null,
+      locationId: row.location_id || null,
+      locationName: row.ubicaciones?.name || null,
       subtotal: Number(row.subtotal),
       discountAmount: Number(row.discount_amount),
       total: Number(row.total),
