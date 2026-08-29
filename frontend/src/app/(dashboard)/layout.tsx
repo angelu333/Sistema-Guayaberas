@@ -20,8 +20,7 @@ export default function DashboardLayout({
   const session = useAuthStore((state) => state.session);
   const setSession = useAuthStore((state) => state.setSession);
   const setTenant = useTenantStore((state) => state.setTenant);
-  // Si ya tenemos sesión persistida, no bloquear la pantalla con spinner
-  const [checkingAuth, setCheckingAuth] = useState(false);
+  const [checkingAuth, setCheckingAuth] = useState(!session);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
