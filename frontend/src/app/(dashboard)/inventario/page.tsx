@@ -19,6 +19,8 @@ import {
   CheckCircle,
   Image as ImageIcon,
   Shirt,
+  PackagePlus,
+  Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -31,7 +33,7 @@ import {
   type InventoryMovementRecord,
 } from "@/services/inventory.service";
 import { productsService } from "@/services/products.service";
-import type { StockAlert, ProductVariant, Category, Product } from "@/types/domain.types";
+import type { StockAlert, ProductVariant, Category, Product, Location } from "@/types/domain.types";
 import { InventoryAdjustmentModal } from "@/components/inventario/InventoryAdjustmentModal";
 import { ProductModal } from "@/components/productos/ProductModal";
 import { EditProductModal } from "@/components/productos/EditProductModal";
@@ -46,10 +48,24 @@ function InventarioYProductosContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
+  // Determinar rol y sucursal del usuario
+  const isSeller = session?.role === "seller";
+  const isAdmin = session?.role === "admin";
+  // El vendedor filtra por su locationId asignado
+  const sellerLocationId = isSeller ? (session?.locationId ?? undefined) : undefined;
+
   const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<ActiveTab>(
-    tabParam === "productos" ? "productos" : tabParam === "historial" ? "historial" : tabParam === "alertas" ? "alertas" : "existencias"
-  );
+  // Los sellers solo pueden ver existencias, historial y alertas (no catálogo de modelos)
+  const validTabs: ActiveTab[] = isSeller ? ["existencias", "historial", "alertas"] : ["existencias", "productos", "historial", "alertas"];
+  const initialTab = (validTabs.includes(tabParam as ActiveTab) ? tabParam : "existencias") as ActiveTab;
+  const [activeTab, setActiveTab] = useState<ActiveTab>(initialTab);
+
+  // Estado para modal de entrada rápida de mercancía (para sellers)
+  const [isEntradaModalOpen, setIsEntradaModalOpen] = useState(false);
+
+  // Estado de Sucursales para el Administrador
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string>("");
 
   // Estados Inventario
   const [stockItems, setStockItems] = useState<StockItemView[]>([]);
@@ -60,7 +76,7 @@ function InventarioYProductosContent() {
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(undefined);
 
-  // Estados Catálogo de Productos
+  // Estados Catálogo de Productos (solo admin)
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -73,20 +89,28 @@ function InventarioYProductosContent() {
     if (!effectiveTenantId) return;
     setLoadingInventory(true);
     try {
-      const [itemsData, movementsData, alertsData] = await Promise.all([
-        inventoryService.getStockByLocation(effectiveTenantId),
+      // Determinar ubicación activa: para seller es la suya, para admin es la seleccionada o undefined (todas)
+      const activeLocId = isSeller ? sellerLocationId : (selectedLocationId || undefined);
+
+      const [itemsData, movementsData, alertsData, locsData] = await Promise.all([
+        inventoryService.getStockByLocation(effectiveTenantId, activeLocId),
         inventoryService.getMovementHistory(effectiveTenantId, 50),
-        inventoryService.getStockAlerts(effectiveTenantId),
+        inventoryService.getStockAlerts(effectiveTenantId, activeLocId),
+        isAdmin && locations.length === 0 ? inventoryService.getLocations(effectiveTenantId) : Promise.resolve(locations),
       ]);
+
       setStockItems(itemsData);
       setMovements(movementsData);
       setAlerts(alertsData);
+      if (locsData && locsData.length > 0 && locations.length === 0) {
+        setLocations(locsData);
+      }
     } catch (err) {
       console.error("Error al cargar datos de inventario:", err);
     } finally {
       setLoadingInventory(false);
     }
-  }, [effectiveTenantId]);
+  }, [effectiveTenantId, isSeller, sellerLocationId, selectedLocationId, isAdmin, locations]);
 
   const loadProductsData = useCallback(async () => {
     setLoadingProducts(true);
@@ -180,35 +204,74 @@ function InventarioYProductosContent() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#26302B] tracking-tight">
-            Inventario & Productos
+          <h1 className="text-2xl font-bold text-[#26302B] tracking-tight flex items-center gap-2">
+            {isSeller ? <Store className="w-6 h-6 text-[#556B5D]" /> : null}
+            {isSeller ? "Inventario de Mi Sucursal" : "Inventario & Productos"}
           </h1>
           <p className="text-sm text-[#6B7A71] mt-0.5">
-            Control de existencias físicas por tienda, catálogo de guayaberas y movimientos
+            {isSeller
+              ? "Existencias en tu punto de venta — puedes registrar entradas de mercancía recibida"
+              : "Control de existencias físicas por tienda, catálogo de guayaberas y movimientos"}
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Selector de Sucursal para Administrador */}
+          {isAdmin && (
+            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-[#DDD9D0] shadow-xs">
+              <Building2 className="w-4 h-4 text-[#556B5D] shrink-0" />
+              <span className="text-xs font-semibold text-[#6B7A71] hidden sm:inline">Filtrar por:</span>
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="text-xs font-bold text-[#26302B] bg-transparent outline-none cursor-pointer pr-1"
+              >
+                <option value="">🌐 Todas las Sucursales (Global)</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    🏬 {loc.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
           <Button variant="outline" onClick={() => { loadInventoryData(); loadProductsData(); }}>
             <RefreshCw className={`w-4 h-4 ${(loadingInventory || loadingProducts) ? "animate-spin" : ""}`} />
             Actualizar
           </Button>
 
-          {activeTab === "productos" ? (
-            <Button onClick={() => setShowProductModal(true)}>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Nuevo Producto
+          {/* Botón de Entrada de Mercancía — visible solo para sellers */}
+          {isSeller && (
+            <Button
+              onClick={() => { setSelectedVariantId(undefined); setIsAdjustmentModalOpen(true); }}
+              className="bg-[#3F7D58] hover:bg-[#2d6040] text-white"
+            >
+              <PackagePlus className="w-4 h-4 mr-1.5" />
+              Registrar Entrada
             </Button>
-          ) : (
-            <Button onClick={() => { setSelectedVariantId(undefined); setIsAdjustmentModalOpen(true); }}>
-              <Plus className="w-4 h-4 mr-1.5" />
-              Movimiento Stock
-            </Button>
+          )}
+
+          {/* Botones de admin */}
+          {isAdmin && (
+            <>
+              {activeTab === "productos" ? (
+                <Button onClick={() => setShowProductModal(true)}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Nuevo Producto
+                </Button>
+              ) : (
+                <Button onClick={() => { setSelectedVariantId(undefined); setIsAdjustmentModalOpen(true); }}>
+                  <Plus className="w-4 h-4 mr-1.5" />
+                  Movimiento Stock
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
 
-      {/* Selector de Pestañas */}
+      {/* Selector de Pestañas — filtrado por rol */}
       <div className="flex border-b border-[#DDD9D0] bg-white rounded-xl p-1 shadow-xs max-w-fit flex-wrap">
         <button
           onClick={() => handleTabChange("existencias")}
@@ -217,18 +280,21 @@ function InventarioYProductosContent() {
           }`}
         >
           <Layers className="w-4 h-4" />
-          Existencias ({stockItems.length})
+          {isSeller ? "Mi Stock" : "Existencias"} ({stockItems.length})
         </button>
 
-        <button
-          onClick={() => handleTabChange("productos")}
-          className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
-            activeTab === "productos" ? "bg-[#556B5D] text-white shadow-xs" : "text-[#6B7A71] hover:text-[#26302B]"
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          Catálogo Modelos ({variants.length})
-        </button>
+        {/* Catálogo de Modelos — solo admin/producción */}
+        {isAdmin && (
+          <button
+            onClick={() => handleTabChange("productos")}
+            className={`px-4 py-2 text-xs font-bold rounded-lg transition-colors flex items-center gap-2 ${
+              activeTab === "productos" ? "bg-[#556B5D] text-white shadow-xs" : "text-[#6B7A71] hover:text-[#26302B]"
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            Catálogo Modelos ({variants.length})
+          </button>
+        )}
 
         <button
           onClick={() => handleTabChange("historial")}
@@ -237,7 +303,7 @@ function InventarioYProductosContent() {
           }`}
         >
           <History className="w-4 h-4" />
-          Historial Movimientos ({movements.length})
+          Historial ({movements.length})
         </button>
 
         <button
@@ -310,7 +376,7 @@ function InventarioYProductosContent() {
                     <th className="py-3 px-4">SKU</th>
                     <th className="py-3 px-4">Producto / Modelo</th>
                     <th className="py-3 px-4">Variante</th>
-                    <th className="py-3 px-4">Ubicación</th>
+                    {isAdmin && <th className="py-3 px-4">Ubicación</th>}
                     <th className="py-3 px-4 text-right">Precio Venta</th>
                     <th className="py-3 px-4 text-center">Stock Actual</th>
                     <th className="py-3 px-4 text-center">Estado</th>
@@ -319,13 +385,15 @@ function InventarioYProductosContent() {
                 </thead>
                 <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
                   {loadingInventory ? (
-                    <tr><td colSpan={8} className="py-8 text-center text-[#6B7A71]">Cargando...</td></tr>
+                    <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">Cargando...</td></tr>
+                  ) : filteredStock.length === 0 ? (
+                    <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">No hay existencias registradas en tu sucursal.</td></tr>
                   ) : filteredStock.map((item) => (
                     <tr key={item.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
                       <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{item.sku}</td>
                       <td className="py-3 px-4 font-medium">{item.productName}</td>
                       <td className="py-3 px-4 text-xs text-[#6B7A71]">{[item.colorName, item.sizeName].filter(Boolean).join(" / ")}</td>
-                      <td className="py-3 px-4 text-xs">{item.locationName}</td>
+                      {isAdmin && <td className="py-3 px-4 text-xs">{item.locationName}</td>}
                       <td className="py-3 px-4 text-right font-medium">${item.salePrice.toFixed(2)}</td>
                       <td className="py-3 px-4 text-center font-bold text-base">{item.quantity}</td>
                       <td className="py-3 px-4 text-center">
@@ -335,8 +403,22 @@ function InventarioYProductosContent() {
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }} className="text-xs font-semibold text-[#556B5D] hover:underline">+ Ajustar</button>
-                          <button onClick={() => handleDeleteVariant(item)} className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                          {/* Seller: solo puede registrar entrada de mercancía */}
+                          {isSeller && (
+                            <button
+                              onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }}
+                              className="text-xs font-semibold text-[#3F7D58] hover:underline"
+                            >
+                              + Entrada
+                            </button>
+                          )}
+                          {/* Admin: ajuste y eliminar */}
+                          {isAdmin && (
+                            <>
+                              <button onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }} className="text-xs font-semibold text-[#556B5D] hover:underline">+ Ajustar</button>
+                              <button onClick={() => handleDeleteVariant(item)} className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

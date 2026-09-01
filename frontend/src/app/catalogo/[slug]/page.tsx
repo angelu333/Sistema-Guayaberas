@@ -15,6 +15,9 @@ import {
   Filter,
   SlidersHorizontal,
   Search,
+  Check,
+  Copy,
+  Link2,
 } from "lucide-react";
 import {
   publicCatalogService,
@@ -203,6 +206,47 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Botones de Compartir y Copiar Enlace */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Botón Copiar Enlace */}
+            <button
+              onClick={handleCopyLink}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl border transition-all shadow-xs cursor-pointer ${
+                copiedLink
+                  ? "bg-[#3F7D58] text-white border-[#3F7D58] scale-105"
+                  : "bg-white text-[#26302B] border-[#E4DDD1] hover:border-[#C49A5A] hover:bg-[#FAF7F2]"
+              }`}
+              title="Copiar enlace del catálogo al portapapeles"
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-4 h-4 text-white" />
+                  <span>¡Enlace Copiado!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4 text-[#C49A5A]" />
+                  <span className="hidden sm:inline">Copiar Enlace</span>
+                  <span className="sm:hidden">Copiar</span>
+                </>
+              )}
+            </button>
+
+            {/* Botón Compartir en WhatsApp */}
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(
+                `¡Hola! Te invito a ver nuestro catálogo digital de guayaberas de ${tenantInfo?.name || "nuestra tienda"}: ${typeof window !== "undefined" ? window.location.href : ""}`
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white transition-all shadow-xs cursor-pointer"
+              title="Compartir catálogo por WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span className="hidden sm:inline">Compartir</span>
+            </a>
           </div>
         </div>
       </header>

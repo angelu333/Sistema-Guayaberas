@@ -86,17 +86,33 @@ export default function POSPage() {
         colores(id, name, hex_code),
         tallas(id, name, sort_order),
         tipos_manga(id, name),
-        existencias(quantity)
+        existencias(quantity, location_id)
       `)
       .eq("tenant_id", effectiveTenantId)
       .eq("is_active", true);
 
     if (!error && data) {
+      const userLocationId = session?.locationId || null;
+
       const mapped: ProductVariant[] = data.map((v: any) => {
-        const totalStock = (v.existencias || []).reduce(
-          (acc: number, ex: any) => acc + (ex.quantity || 0),
-          0
-        );
+        let localStock = 0;
+        let otherStock = 0;
+        let totalStock = 0;
+
+        (v.existencias || []).forEach((ex: any) => {
+          const qty = ex.quantity || 0;
+          totalStock += qty;
+          if (userLocationId) {
+            if (ex.location_id === userLocationId) {
+              localStock += qty;
+            } else {
+              otherStock += qty;
+            }
+          } else {
+            localStock += qty;
+          }
+        });
+
         return {
           id: v.id,
           tenantId: effectiveTenantId,
@@ -128,12 +144,14 @@ export default function POSPage() {
           isActive: v.is_active,
           images: [],
           totalStock,
-        };
+          localStock,
+          otherStock,
+        } as any;
       });
       setVariants(mapped);
     }
     setLoadingVariants(false);
-  }, [effectiveTenantId]);
+  }, [effectiveTenantId, session?.locationId]);
 
   const loadClients = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -171,6 +189,8 @@ export default function POSPage() {
           minPrice: v.salePrice,
           maxPrice: v.salePrice,
           totalStock: 0,
+          localStock: 0,
+          otherStock: 0,
           availableColors: [],
           variants: [],
         });
@@ -180,6 +200,8 @@ export default function POSPage() {
       entry.minPrice = Math.min(entry.minPrice, v.salePrice);
       entry.maxPrice = Math.max(entry.maxPrice, v.salePrice);
       entry.totalStock += v.totalStock || 0;
+      entry.localStock += (v as any).localStock ?? (v.totalStock || 0);
+      entry.otherStock += (v as any).otherStock ?? 0;
 
       if (v.color?.name && !entry.availableColors.some((c) => c.name === v.color?.name)) {
         entry.availableColors.push({
@@ -236,6 +258,7 @@ export default function POSPage() {
       const result = await salesService.completeSale({
         tenantId: effectiveTenantId,
         sellerId: session?.userId || "",
+        locationId: session?.locationId || null,
         clientId: cart.clientId,
         items: cart.items,
         globalDiscountPercent: cart.globalDiscountPercent,
@@ -357,13 +380,19 @@ export default function POSPage() {
                         )}
                       </div>
 
-                      {/* Stock Badge */}
+                      {/* Stock Badge Inteligente */}
                       <span className={`absolute top-4 right-4 text-[10px] px-2 py-0.5 rounded-md font-bold shadow-xs ${
-                        isOutOfStock
-                          ? "bg-[#FAEAEA] text-[#B85450]"
-                          : "bg-[#EBF5F0] text-[#3F7D58] border border-[#A7D7B9]"
+                        prod.localStock > 0
+                          ? "bg-[#EBF5F0] text-[#3F7D58] border border-[#A7D7B9]"
+                          : prod.otherStock > 0
+                          ? "bg-[#FBF4E8] text-[#C49A5A] border border-[#E8D4B0]"
+                          : "bg-[#FAEAEA] text-[#B85450]"
                       }`}>
-                        {isOutOfStock ? "Agotado" : `${prod.totalStock} pzas`}
+                        {prod.localStock > 0
+                          ? `${prod.localStock} en tienda`
+                          : prod.otherStock > 0
+                          ? `0 (+${prod.otherStock} bodega)`
+                          : "Sobrepedido"}
                       </span>
 
                       {/* Nombre y Categoría */}

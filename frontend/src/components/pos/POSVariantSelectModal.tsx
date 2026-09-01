@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Plus, Minus, ShoppingCart, Shirt, ShieldCheck, AlertCircle } from "lucide-react";
+import { X, Plus, Minus, ShoppingCart, Shirt, ShieldCheck, AlertCircle, Sparkles, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import type { ProductVariant } from "@/types/domain.types";
 
@@ -13,6 +13,8 @@ export interface GroupedPOSProduct {
   minPrice: number;
   maxPrice: number;
   totalStock: number;
+  localStock: number;
+  otherStock: number;
   availableColors: { name: string; hexCode: string | null }[];
   variants: ProductVariant[];
 }
@@ -75,8 +77,12 @@ export function POSVariantSelectModal({
   );
 
   const price = matchingVariant ? matchingVariant.salePrice : product.minPrice;
-  const stock = matchingVariant ? matchingVariant.totalStock ?? 0 : 0;
-  const isOutOfStock = stock <= 0;
+  
+  // Stock local vs otras sucursales
+  const localStock = (matchingVariant as any)?.localStock ?? (matchingVariant?.totalStock ?? 0);
+  const otherStock = (matchingVariant as any)?.otherStock ?? 0;
+  const isOutOfLocalStock = localStock <= 0;
+  const hasOtherStock = otherStock > 0;
 
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
@@ -91,13 +97,13 @@ export function POSVariantSelectModal({
   };
 
   const handleAdd = () => {
-    if (!matchingVariant || isOutOfStock) return;
+    if (!matchingVariant) return;
     onAddToCart(matchingVariant, quantity);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fade-in font-[Outfit]">
       <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl border border-[#DDD9D0] overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#DDD9D0] bg-[#F8F6F1]">
@@ -106,7 +112,7 @@ export function POSVariantSelectModal({
               <Shirt className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-[#26302B] font-[Outfit] leading-tight">
+              <h2 className="text-base font-bold text-[#26302B] leading-tight">
                 {product.name}
               </h2>
               <span className="text-[11px] font-semibold text-[#556B5D] bg-[#EBF0EC] px-2 py-0.5 rounded-md">
@@ -143,11 +149,31 @@ export function POSVariantSelectModal({
               <span className="text-xl font-bold font-mono text-[#3F7D58]">
                 ${price.toFixed(2)} MXN
               </span>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <ShieldCheck className={`w-3.5 h-3.5 ${isOutOfStock ? "text-[#B85450]" : "text-[#3F7D58]"}`} />
-                <span className={`text-[11px] font-bold ${isOutOfStock ? "text-[#B85450]" : "text-[#3F7D58]"}`}>
-                  {isOutOfStock ? "Agotado en esta talla" : `Stock disponible: ${stock} piezas`}
-                </span>
+              
+              {/* Badge de Disponibilidad Inteligente */}
+              <div className="flex flex-col gap-0.5 mt-1">
+                {localStock > 0 ? (
+                  <div className="flex items-center gap-1 text-[#3F7D58]">
+                    <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-[11px] font-bold">
+                      Stock en tu tienda: {localStock} piezas
+                    </span>
+                  </div>
+                ) : hasOtherStock ? (
+                  <div className="flex items-center gap-1 text-[#C49A5A]">
+                    <Building2 className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-[11px] font-bold">
+                      0 en tu local (+{otherStock} en bodega/otra tienda)
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1 text-[#D89B2B]">
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-[11px] font-bold">
+                      Sin stock físico (Venta Sobrepedido)
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -156,7 +182,7 @@ export function POSVariantSelectModal({
           {product.availableColors.length > 0 && (
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-[#26302B]">
-                1. Seleccione Color: <span className="font-normal text-[#556B5D] font-bold">{currentColor}</span>
+                1. Color: <span className="font-normal text-[#556B5D] font-bold">{currentColor}</span>
               </label>
               <div className="flex flex-wrap gap-2">
                 {product.availableColors.map((c) => (
@@ -186,7 +212,7 @@ export function POSVariantSelectModal({
           {/* 2. Selector Reactivo de Tallas */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-[#26302B]">
-              2. Seleccione Talla disponible en {currentColor}:{" "}
+              2. Talla en {currentColor}:{" "}
               <span className="font-normal text-[#556B5D] font-bold">{currentSize}</span>
             </label>
             {availableSizes.length === 0 ? (
@@ -201,22 +227,31 @@ export function POSVariantSelectModal({
                   const v = product.variants.find(
                     (item) => item.color?.name === currentColor && item.size?.name === sz
                   );
-                  const vStock = v?.totalStock ?? 0;
+                  const vLocal = (v as any)?.localStock ?? (v?.totalStock ?? 0);
+                  const vOther = (v as any)?.otherStock ?? 0;
 
                   return (
                     <button
                       key={sz}
                       type="button"
                       onClick={() => setSelectedSize(sz)}
-                      className={`min-w-[48px] h-10 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all ${
+                      className={`min-w-[54px] h-11 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all ${
                         isSelected
                           ? "bg-[#26302B] text-white border-[#26302B] shadow-md scale-105"
                           : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
                       }`}
                     >
                       <span>{sz}</span>
-                      <span className={`text-[9px] ${isSelected ? "text-[#C49A5A]" : "text-[#8FA393]"}`}>
-                        {vStock} pz
+                      <span className={`text-[9px] ${
+                        isSelected
+                          ? "text-[#C49A5A]"
+                          : vLocal > 0
+                          ? "text-[#3F7D58] font-bold"
+                          : vOther > 0
+                          ? "text-[#C49A5A]"
+                          : "text-[#8FA393]"
+                      }`}>
+                        {vLocal > 0 ? `${vLocal} pz` : vOther > 0 ? `+${vOther}` : "0 pz"}
                       </span>
                     </button>
                   );
@@ -227,7 +262,14 @@ export function POSVariantSelectModal({
 
           {/* 3. Selector de Cantidad */}
           <div className="pt-2 border-t border-[#DDD9D0] flex items-center justify-between">
-            <span className="text-xs font-bold text-[#26302B]">Cantidad a cobrar:</span>
+            <div>
+              <span className="text-xs font-bold text-[#26302B] block">Cantidad a cobrar:</span>
+              {isOutOfLocalStock && (
+                <span className="text-[10px] text-[#C49A5A] font-semibold">
+                  (Venta sobrepedido / entrega diferida)
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2 bg-[#F8F6F1] p-1 rounded-xl border border-[#DDD9D0]">
               <button
                 type="button"
@@ -241,7 +283,7 @@ export function POSVariantSelectModal({
               </span>
               <button
                 type="button"
-                onClick={() => setQuantity((q) => Math.min(stock > 0 ? stock : 99, q + 1))}
+                onClick={() => setQuantity((q) => Math.min(99, q + 1))}
                 className="w-8 h-8 rounded-lg bg-[#556B5D] text-white font-bold flex items-center justify-center shadow-xs"
               >
                 <Plus className="w-4 h-4" />
@@ -256,12 +298,16 @@ export function POSVariantSelectModal({
             Cancelar
           </Button>
           <Button
-            className="flex-1 bg-[#3F7D58] hover:bg-[#326446] text-white font-bold"
-            disabled={isOutOfStock || !matchingVariant}
+            className={`flex-1 font-bold text-white ${
+              isOutOfLocalStock
+                ? "bg-[#C49A5A] hover:bg-[#b08749]"
+                : "bg-[#3F7D58] hover:bg-[#326446]"
+            }`}
+            disabled={!matchingVariant}
             onClick={handleAdd}
           >
             <ShoppingCart className="w-4 h-4 mr-1.5" />
-            Cobrar ${(price * quantity).toFixed(2)}
+            {isOutOfLocalStock ? "Vender Sobrepedido" : "Cobrar"} ${(price * quantity).toFixed(2)}
           </Button>
         </div>
       </div>

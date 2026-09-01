@@ -344,9 +344,10 @@ export const inventoryService = {
   },
 
   /**
-   * Obtiene las alertas de variantes con bajo stock o stock en 0 (agotado)
+   * Obtiene las alertas de variantes con bajo stock o stock en 0 (agotado).
+   * Si se provee locationId, evalúa el stock exclusivamente de esa sucursal.
    */
-  async getStockAlerts(tenantId: string): Promise<StockAlert[]> {
+  async getStockAlerts(tenantId: string, locationId?: string): Promise<StockAlert[]> {
     const { data, error } = await supabase
       .from("variantes_producto")
       .select(`
@@ -356,7 +357,7 @@ export const inventoryService = {
         productos!inner(name),
         colores(name),
         tallas(name),
-        existencias(quantity)
+        existencias(quantity, location_id)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
@@ -369,7 +370,10 @@ export const inventoryService = {
     const alerts: StockAlert[] = [];
 
     (data || []).forEach((v: any) => {
-      const totalStock = (v.existencias || []).reduce(
+      const filteredExistencias = (v.existencias || []).filter((ex: any) =>
+        locationId ? ex.location_id === locationId : true
+      );
+      const totalStock = filteredExistencias.reduce(
         (acc: number, curr: any) => acc + (curr.quantity || 0),
         0
       );

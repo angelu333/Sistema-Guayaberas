@@ -50,8 +50,8 @@ export default function DashboardLayout({
           // Control de acceso por rol (RBAC)
           const role = currentSession.role;
           if (role === "seller") {
+            // Rutas exclusivas del admin — el seller NO puede acceder
             const adminOnlyPaths = [
-              "/dashboard",
               "/produccion",
               "/insumos",
               "/reportes",
@@ -61,7 +61,7 @@ export default function DashboardLayout({
               "/compras",
             ];
             if (adminOnlyPaths.some((p) => pathname.startsWith(p))) {
-              router.push("/pos");
+              router.push("/dashboard");
             }
           } else if (role === "production") {
             const sellerOrAdminPaths = [
