@@ -100,6 +100,12 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     setTimeout(() => setCopiedLink(false), 2500);
   };
 
+  const handleShareWhatsApp = () => {
+    const url = typeof window !== "undefined" ? window.location.href : "";
+    const text = `¡Hola! Te invito a ver nuestro catálogo digital de guayaberas de ${tenantInfo?.name || "nuestra tienda"}: ${url}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  };
+
   // Manejadores del Carrito
   const handleAddToCart = (newItem: PublicCartItem) => {
     setCartItems((prev) => {
@@ -235,18 +241,14 @@ function PublicCatalogContent({ slug }: { slug: string }) {
             </button>
 
             {/* Botón Compartir en WhatsApp */}
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(
-                `¡Hola! Te invito a ver nuestro catálogo digital de guayaberas de ${tenantInfo?.name || "nuestra tienda"}: ${typeof window !== "undefined" ? window.location.href : ""}`
-              )}`}
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              onClick={handleShareWhatsApp}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold rounded-xl bg-[#25D366] hover:bg-[#1EBE5D] text-white transition-all shadow-xs cursor-pointer"
               title="Compartir catálogo por WhatsApp"
             >
               <MessageCircle className="w-4 h-4" />
               <span className="hidden sm:inline">Compartir</span>
-            </a>
+            </button>
           </div>
         </div>
       </header>
@@ -427,6 +429,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
             {displayedProducts.map((p) => {
               const isOutOfStock = p.totalStock <= 0;
+              const isLowStock = p.totalStock > 0 && p.totalStock <= 3;
               return (
                 <div
                   key={p.productId}
@@ -466,14 +469,22 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                       </div>
                     )}
 
-                    {/* Badge Agotado */}
-                    {isOutOfStock && (
-                      <div className="absolute top-2 right-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#B85450] text-white">
+                    {/* Badge de Disponibilidad arriba-derecha */}
+                    <div className="absolute top-2 right-2">
+                      {isOutOfStock ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#B85450] text-white shadow-xs">
                           Agotado
                         </span>
-                      </div>
-                    )}
+                      ) : isLowStock ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#C49A5A] text-white shadow-xs">
+                          Pocas piezas
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#3F7D58] text-white shadow-xs">
+                          Disponible
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Contenido debajo de la foto */}

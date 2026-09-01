@@ -103,6 +103,7 @@ export function ProductDetailModal({
   const finalPrice = matchingVariant ? matchingVariant.salePrice : product.minPrice;
   const currentStock = matchingVariant ? matchingVariant.stock : 0;
   const isOutOfStock = matchingVariant ? matchingVariant.stock <= 0 : false;
+  const isLowStock = currentStock > 0 && currentStock <= 3;
 
   const handleColorChange = (newColor: string) => {
     setSelectedColor(newColor);
@@ -424,21 +425,23 @@ export function ProductDetailModal({
             <div
               className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
               style={{
-                backgroundColor: isOutOfStock ? "#FEF5F5" : "#F0F7F3",
-                borderLeft: `3px solid ${isOutOfStock ? "#B85450" : "#3F7D58"}`,
+                backgroundColor: isOutOfStock ? "#FEF5F5" : isLowStock ? "#FBF4E8" : "#F0F7F3",
+                borderLeft: `3px solid ${isOutOfStock ? "#B85450" : isLowStock ? "#C49A5A" : "#3F7D58"}`,
               }}
             >
               <ShieldCheck
                 className="w-4 h-4 shrink-0"
-                style={{ color: isOutOfStock ? "#B85450" : "#3F7D58" }}
+                style={{ color: isOutOfStock ? "#B85450" : isLowStock ? "#C49A5A" : "#3F7D58" }}
               />
               <span
                 className="text-xs font-bold"
-                style={{ color: isOutOfStock ? "#B85450" : "#3F7D58" }}
+                style={{ color: isOutOfStock ? "#B85450" : isLowStock ? "#C49A5A" : "#3F7D58" }}
               >
                 {isOutOfStock
                   ? "Agotado en esta combinación"
-                  : `Disponible · ${currentStock} pieza${currentStock !== 1 ? "s" : ""} en existencia`}
+                  : isLowStock
+                  ? "Pocas piezas disponibles"
+                  : "Disponible en existencia"}
               </span>
             </div>
           </div>
