@@ -350,29 +350,209 @@ export const productsService = {
   },
 
   /**
-   * Elimina un producto/modelo completo y sus variantes
+   * Elimina/Desactiva un producto/modelo completo y sus variantes
+   * Si tiene registros asociados (ventas, cotizaciones), se desactiva (is_active = false)
+   * para proteger la integridad referencial histórica sin errores de Foreign Key.
    */
   async deleteProduct(productId: string): Promise<void> {
     const supabase = createClient();
-    await supabase.from("imagenes_producto").delete().eq("product_id", productId);
-    await supabase.from("variantes_producto").delete().eq("product_id", productId);
-    const { error } = await supabase.from("productos").delete().eq("id", productId);
 
-    if (error) {
-      throw new Error(`Error al eliminar el producto: ${error.message}`);
+    // 1. Desactivar de inmediato producto y todas sus variantes para ocultar del sistema
+    await supabase
+      .from("variantes_producto")
+      .update({ is_active: false })
+      .eq("product_id", productId);
+
+    const { error: prodUpdateErr } = await supabase
+      .from("productos")
+      .update({ is_active: false })
+      .eq("id", productId);
+
+    if (prodUpdateErr) {
+      throw new Error(`Error al archivar el producto: ${prodUpdateErr.message}`);
+    }
+
+    // 2. Intentar borrado físico si no tiene referencias históricas (ventas, cotizaciones)
+    try {
+      await supabase.from("imagenes_producto").delete().eq("product_id", productId);
+      await supabase.from("variantes_producto").delete().eq("product_id", productId);
+      await supabase.from("productos").delete().eq("id", productId);
+    } catch {
+      // Si falla por FK (ventas pasadas), el producto ya quedó desactivado con is_active: false
     }
   },
 
   /**
-   * Elimina una variante específica
+   * Elimina o desactiva una variante específica de forma segura
    */
   async deleteVariant(variantId: string): Promise<void> {
     const supabase = createClient();
-    const { error } = await supabase.from("variantes_producto").delete().eq("id", variantId);
+
+    // 1. Desactivar variante
+    const { error: updateErr } = await supabase
+      .from("variantes_producto")
+      .update({ is_active: false })
+      .eq("id", variantId);
+
+    if (updateErr) {
+      throw new Error(`Error al archivar la variante: ${updateErr.message}`);
+    }
+
+    // 2. Intentar borrado físico si no tiene ventas ni registros
+    try {
+      await supabase.from("existencias").delete().eq("variant_id", variantId);
+      await supabase.from("variantes_producto").delete().eq("id", variantId);
+    } catch {
+      // Queda archivada como is_active: false
+    }
+  },
+
+  /**
+   * Actualiza el precio o datos de una variante existente
+   */
+  async updateVariant(
+    variantId: string,
+    data: {
+      salePrice?: number;
+      costPrice?: number;
+      minStock?: number;
+      sku?: string;
+      isActive?: boolean;
+    }
+  ): Promise<void> {
+    const supabase = createClient();
+    const updatePayload: any = {};
+    if (data.salePrice !== undefined) updatePayload.sale_price = data.salePrice;
+    if (data.costPrice !== undefined) updatePayload.cost_price = data.costPrice;
+    if (data.minStock !== undefined) updatePayload.min_stock = data.minStock;
+    if (data.sku !== undefined) updatePayload.sku = data.sku.toUpperCase().trim();
+    if (data.isActive !== undefined) updatePayload.is_active = data.isActive;
+
+    const { error } = await supabase
+      .from("variantes_producto")
+      .update(updatePayload)
+      .eq("id", variantId);
 
     if (error) {
-      throw new Error(`Error al eliminar la variante: ${error.message}`);
+      throw new Error(`Error al actualizar la variante: ${error.message}`);
     }
+  },
+
+  /**
+   * Agrega una nueva variante a un producto ya existente
+   */
+  async addVariant(
+    tenantId: string,
+    productId: string,
+    variant: CreateVariantDTO,
+    locationId?: string
+  ): Promise<string> {
+    const supabase = createClient();
+
+    const { data: newVar, error } = await supabase
+      .from("variantes_producto")
+      .insert({
+        tenant_id: tenantId,
+        product_id: productId,
+        color_id: variant.colorId || null,
+        size_id: variant.sizeId || null,
+        sleeve_type_id: variant.sleeveTypeId || null,
+        sku: variant.sku.toUpperCase().trim(),
+        cost_price: variant.costPrice,
+        sale_price: variant.salePrice,
+        min_stock: variant.minStock ?? 5,
+        is_active: true,
+      })
+      .select("id")
+      .single();
+
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error("El SKU especificado ya existe en el inventario.");
+      }
+      throw new Error(`Error al agregar variante: ${error.message}`);
+    }
+
+    // Si se especificó stock inicial y sucursal, registrar entrada
+    if (locationId && (variant.initialStock ?? 0) > 0) {
+      await supabase.from("movimientos_inventario").insert({
+        tenant_id: tenantId,
+        variant_id: newVar.id,
+        location_id: locationId,
+        type: "ENTRADA",
+        quantity: variant.initialStock!,
+        reason: "Stock inicial al agregar variante al modelo",
+        user_id: null,
+      });
+    }
+
+    return newVar.id;
+  },
+
+  /**
+   * Obtiene todas las variantes de un producto específico
+   */
+  async getVariantsByProduct(productId: string): Promise<ProductVariant[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("variantes_producto")
+      .select(`
+        id,
+        tenant_id,
+        product_id,
+        color_id,
+        size_id,
+        sleeve_type_id,
+        sku,
+        cost_price,
+        sale_price,
+        min_stock,
+        is_active,
+        created_at,
+        updated_at,
+        color:colores(id, name, hex_code),
+        size:tallas(id, name, sort_order),
+        sleeveType:tipos_manga(id, name)
+      `)
+      .eq("product_id", productId)
+      .order("created_at", { ascending: true });
+
+    if (error || !data) return [];
+    return data.map((item: any) => ({
+      id: item.id,
+      tenantId: item.tenant_id,
+      productId: item.product_id,
+      product: null,
+      colorId: item.color_id,
+      color: item.color ? {
+        id: item.color.id,
+        tenantId: item.tenant_id,
+        name: item.color.name,
+        hexCode: item.color.hex_code,
+        isActive: true,
+      } : null,
+      sizeId: item.size_id,
+      size: item.size ? {
+        id: item.size.id,
+        tenantId: item.tenant_id,
+        name: item.size.name,
+        sortOrder: item.size.sort_order,
+        isActive: true,
+      } : null,
+      sleeveTypeId: item.sleeve_type_id,
+      sleeveType: item.sleeveType ? {
+        id: item.sleeveType.id,
+        tenantId: item.tenant_id,
+        name: item.sleeveType.name,
+        isActive: true,
+      } : null,
+      sku: item.sku,
+      costPrice: Number(item.cost_price),
+      salePrice: Number(item.sale_price),
+      minStock: item.min_stock,
+      isActive: item.is_active,
+      images: [],
+    }));
   },
 
   /**

@@ -21,6 +21,7 @@ import {
   Shirt,
   PackagePlus,
   Store,
+  Pencil,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -121,6 +122,7 @@ function InventarioYProductosContent() {
           tenantId: effectiveTenantId,
           search: productSearch || undefined,
           categoryId: selectedCategory || undefined,
+          isActive: true,
         }),
         productsService.getCategories(effectiveTenantId),
       ]);
@@ -165,12 +167,12 @@ function InventarioYProductosContent() {
   };
 
   const handleDeleteProduct = async (productId: string, productName: string) => {
-    if (!confirm(`¿Eliminar el modelo "${productName}" y todas sus variantes de forma permanente?`)) return;
+    if (!confirm(`¿Deseas eliminar/archivar el modelo "${productName}"? Dejará de mostrarse en catálogo y punto de venta.`)) return;
     try {
       await productsService.deleteProduct(productId);
       await Promise.all([loadProductsData(), loadInventoryData()]);
     } catch (err: any) {
-      alert(err.message || "Error al eliminar modelo.");
+      alert(err.message || "Error al procesar modelo.");
     }
   };
 
@@ -505,15 +507,27 @@ function InventarioYProductosContent() {
                     <td className="p-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         {v.product && (
-                          <button onClick={() => setSelectedProductForEdit(v.product)} className="p-1 text-[#556B5D] hover:bg-[#EEF1EE] rounded">
-                            <ImageIcon className="w-4 h-4" />
+                          <button
+                            onClick={() => setSelectedProductForEdit(v.product)}
+                            className="p-1.5 text-[#556B5D] hover:bg-[#EEF1EE] rounded-lg transition-colors cursor-pointer"
+                            title="Editar modelo, fotos y precios de tallas"
+                          >
+                            <Pencil className="w-4 h-4" />
                           </button>
                         )}
-                        <button onClick={() => handleToggleVariantStatus(v.id, v.isActive)} className="p-1 text-[#6B7A71] hover:bg-[#F0EDE6] rounded">
+                        <button
+                          onClick={() => handleToggleVariantStatus(v.id, v.isActive)}
+                          className="p-1.5 text-[#6B7A71] hover:bg-[#F0EDE6] rounded-lg transition-colors cursor-pointer"
+                          title={v.isActive ? "Desactivar variante" : "Activar variante"}
+                        >
                           <CheckCircle className="w-4 h-4" />
                         </button>
                         {v.product && (
-                          <button onClick={() => handleDeleteProduct(v.product!.id, v.product!.name)} className="p-1 text-[#B85450] hover:bg-red-50 rounded">
+                          <button
+                            onClick={() => handleDeleteProduct(v.product!.id, v.product!.name)}
+                            className="p-1.5 text-[#B85450] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Eliminar / Archivar modelo"
+                          >
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
