@@ -103,12 +103,22 @@ export function CatalogsSettings({ tenantId }: CatalogsSettingsProps) {
   // 2. Guardar Talla
   const handleCreateSize = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSizeName.trim()) return;
+    const cleanName = newSizeName.trim();
+    if (!cleanName) return;
+
+    // Validación previa para no permitir duplicados
+    const isDuplicate = tallas.some(
+      (t) => t.name.toLowerCase().trim() === cleanName.toLowerCase()
+    );
+    if (isDuplicate) {
+      showFeedback("error", `La talla "${cleanName}" ya se encuentra registrada en su catálogo.`);
+      return;
+    }
 
     setCreatingSize(true);
     try {
-      const created = await productsService.createSize(tenantId, newSizeName, Number(newSizeOrder) || 50);
-      setTallas((prev) => [...prev, created].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
+      const created = await productsService.createSize(tenantId, cleanName, Number(newSizeOrder) || undefined);
+      setTallas((prev) => productsService.sortSizes([...prev, created]));
       setNewSizeName("");
       showFeedback("success", `Talla "${created.name}" agregada con éxito.`);
     } catch (err: any) {

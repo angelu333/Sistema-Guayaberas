@@ -91,7 +91,14 @@ export function POSVariantSelectModal({
     )
     .map((v) => v.size?.name)
     .filter(Boolean) as string[];
-  const availableSizes = Array.from(new Set(sizesForColorAndSleeve));
+  const availableSizes = Array.from(new Set(sizesForColorAndSleeve)).sort((a, b) => {
+    const numA = parseFloat(a);
+    const numB = parseFloat(b);
+    if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+    if (!isNaN(numA)) return -1;
+    if (!isNaN(numB)) return 1;
+    return a.localeCompare(b, undefined, { numeric: true });
+  });
 
   const currentSize =
     selectedSize && availableSizes.includes(selectedSize)

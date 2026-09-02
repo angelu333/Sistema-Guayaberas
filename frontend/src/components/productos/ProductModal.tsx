@@ -92,6 +92,17 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
       setSizes(szs);
       setSleeveTypes(slvs);
       setLocations(locs);
+
+      // Pre-seleccionar en la fila inicial si está vacía
+      setVariants((prev) =>
+        prev.map((v) => ({
+          ...v,
+          colorId: v.colorId || cols[0]?.id || "",
+          sizeId: v.sizeId || szs[0]?.id || "",
+          sleeveTypeId: v.sleeveTypeId || slvs[0]?.id || "",
+        }))
+      );
+
       // Seleccionar la primera ubicación por defecto
       if (locs.length > 0 && !selectedLocationId) {
         setSelectedLocationId(locs[0].id);
@@ -137,13 +148,23 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   };
 
   const handleQuickCreateSize = async () => {
-    if (!newSizeName.trim()) return;
+    const cleanName = newSizeName.trim();
+    if (!cleanName) return;
     if (!session?.tenantId) return;
+
+    // Validación para no permitir registrar la misma talla
+    const isDuplicate = sizes.some(
+      (s) => s.name.toLowerCase().trim() === cleanName.toLowerCase()
+    );
+    if (isDuplicate) {
+      setErrorMsg(`La talla "${cleanName}" ya se encuentra registrada en su catálogo.`);
+      return;
+    }
 
     setCreatingSizeLoading(true);
     try {
-      const created = await productsService.createSize(session.tenantId, newSizeName, Number(newSizeOrder) || 50);
-      setSizes((prev) => [...prev, created].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
+      const created = await productsService.createSize(session.tenantId, cleanName, Number(newSizeOrder) || undefined);
+      setSizes((prev) => productsService.sortSizes([...prev, created]));
       setNewSizeName("");
       setIsCreatingSize(false);
     } catch (err: any) {

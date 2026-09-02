@@ -179,7 +179,14 @@ export const publicCatalogService = {
 
     const modelos = Array.from(modelosMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     const colores = Array.from(coloresMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const tallas = Array.from(tallasMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const tallas = Array.from(tallasMap.values()).sort((a, b) => {
+      const numA = parseFloat(a.name);
+      const numB = parseFloat(b.name);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      if (!isNaN(numA)) return -1;
+      if (!isNaN(numB)) return 1;
+      return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
     const mangas = Array.from(mangasMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
     return { modelos, colores, tallas, mangas };

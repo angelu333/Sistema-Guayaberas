@@ -693,15 +693,42 @@ export const productsService = {
   },
 
   /**
-   * Obtiene las tallas del tenant
+   * Ordena tallas de menor a mayor de forma numérica inteligente (ej. 32, 34, 38, 40, 42, 44...)
+   */
+  sortSizes(sizes: Size[]): Size[] {
+    return [...sizes].sort((a, b) => {
+      const numA = parseFloat(a.name);
+      const numB = parseFloat(b.name);
+      const isNumA = !isNaN(numA);
+      const isNumB = !isNaN(numB);
+
+      // Si ambas son numéricas (ej: "34" vs "38"), ordenar de menor a mayor
+      if (isNumA && isNumB) {
+        return numA - numB;
+      }
+      // Números van antes que letras
+      if (isNumA) return -1;
+      if (isNumB) return 1;
+
+      // Si tienen sortOrder explícito distinto
+      if (a.sortOrder !== undefined && b.sortOrder !== undefined && a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+
+      // Orden alfabético/alfanumérico natural de fallback
+      return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+    });
+  },
+
+  /**
+   * Obtiene las tallas del tenant ordenadas de menor a mayor
    */
   async getSizes(tenantId?: string): Promise<Size[]> {
     const supabase = createClient();
     let query = supabase
       .from("tallas")
       .select("*")
-      .eq("is_active", true)
-      .order("sort_order", { ascending: true });
+      .eq("is_active", true);
 
     if (tenantId) {
       query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
@@ -710,35 +737,82 @@ export const productsService = {
     const { data, error } = await query;
 
     if (error) throw new Error(error.message);
-    return (data || []).map((s: any) => ({
+    const mapped = (data || []).map((s: any) => ({
       id: s.id,
       tenantId: s.tenant_id,
       name: s.name,
       sortOrder: s.sort_order,
       isActive: s.is_active,
     }));
+
+    return this.sortSizes(mapped);
   },
 
   /**
-   * Crea una nueva talla para la empresa
+   * Crea una nueva talla para la empresa validando que no esté duplicada
    */
   async createSize(tenantId: string, name: string, sortOrder?: number): Promise<Size> {
     const supabase = createClient();
     const cleanName = name.trim();
     if (!cleanName) throw new Error("El nombre de la talla es requerido.");
 
+    // 1. Validar si ya existe la talla para este tenant (evitar duplicados)
+    const { data: existing } = await supabase
+      .from("tallas")
+      .select("id, name, is_active, sort_order")
+      .eq("tenant_id", tenantId)
+      .ilike("name", cleanName);
+
+    // Calcular orden numérico automático si el nombre es numérico (ej: "38" -> orden 38)
+    const numericVal = parseFloat(cleanName);
+    const computedOrder = sortOrder !== undefined ? sortOrder : (!isNaN(numericVal) ? numericVal : 50);
+
+    if (existing && existing.length > 0) {
+      const activeSize = existing.find((e: any) => e.is_active);
+      if (activeSize) {
+        throw new Error(`La talla "${cleanName}" ya se encuentra registrada en su catálogo.`);
+      }
+
+      // Si existía pero estaba inactiva, reactivarla
+      const { data: reactivated, error: reactError } = await supabase
+        .from("tallas")
+        .update({
+          is_active: true,
+          sort_order: computedOrder,
+        })
+        .eq("id", existing[0].id)
+        .select("*")
+        .single();
+
+      if (reactError) throw new Error(`Error al reactivar talla: ${reactError.message}`);
+
+      return {
+        id: reactivated.id,
+        tenantId: reactivated.tenant_id,
+        name: reactivated.name,
+        sortOrder: reactivated.sort_order,
+        isActive: reactivated.is_active,
+      };
+    }
+
+    // 2. Insertar nueva talla
     const { data, error } = await supabase
       .from("tallas")
       .insert({
         tenant_id: tenantId,
         name: cleanName,
-        sort_order: sortOrder ?? 50,
+        sort_order: computedOrder,
         is_active: true,
       })
       .select("*")
       .single();
 
-    if (error) throw new Error(`Error al crear talla: ${error.message}`);
+    if (error) {
+      if (error.code === "23505") {
+        throw new Error(`La talla "${cleanName}" ya se encuentra registrada.`);
+      }
+      throw new Error(`Error al crear talla: ${error.message}`);
+    }
 
     return {
       id: data.id,
@@ -763,23 +837,42 @@ export const productsService = {
   },
 
   /**
-   * Obtiene los tipos de manga del tenant
+   * Obtiene los tipos de manga del tenant.
+   * Si al tenant le falta "Manga Corta" o "Manga Larga", se crean automáticamente
+   * por defecto para que SIEMPRE existan ambas opciones universales.
    */
   async getSleeveTypes(tenantId?: string): Promise<SleeveType[]> {
     const supabase = createClient();
-    let query = supabase
+    if (!tenantId) return [];
+
+    let { data, error } = await supabase
       .from("tipos_manga")
       .select("*")
+      .eq("tenant_id", tenantId)
       .eq("is_active", true)
       .order("name");
 
-    if (tenantId) {
-      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    const hasCorta = data?.some((m: any) => m.name.toLowerCase().includes("corta"));
+    const hasLarga = data?.some((m: any) => m.name.toLowerCase().includes("larga"));
+
+    if (!hasCorta || !hasLarga) {
+      const toAdd = [];
+      if (!hasCorta) toAdd.push({ tenant_id: tenantId, name: "Manga Corta", is_active: true });
+      if (!hasLarga) toAdd.push({ tenant_id: tenantId, name: "Manga Larga", is_active: true });
+
+      await supabase.from("tipos_manga").insert(toAdd);
+
+      const refetch = await supabase
+        .from("tipos_manga")
+        .select("*")
+        .eq("tenant_id", tenantId)
+        .eq("is_active", true)
+        .order("name");
+
+      data = refetch.data || data;
     }
 
-    const { data, error } = await query;
-
-    if (error) throw new Error(error.message);
+    if (error && !data) throw new Error(error.message);
     return (data || []).map((m: any) => ({
       id: m.id,
       tenantId: m.tenant_id,
