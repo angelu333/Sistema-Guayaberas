@@ -15,6 +15,7 @@ import {
   Share2,
   X,
   Building2,
+  Shirt,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth.store";
@@ -107,27 +108,19 @@ export function Sidebar({ isMobileOpen = false, onCloseMobile }: SidebarProps) {
 
   const sidebarContent = (
     <div className="flex flex-col justify-between h-full font-[Outfit]">
-      {/* Branding Superior */}
       <div>
+        {/* Cabecera de Navegación */}
         <div className="p-4 border-b border-[#38463F] flex items-center justify-between">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[#556B5D] flex items-center justify-center text-white font-bold text-lg shadow-sm shrink-0 overflow-hidden p-1 border border-[#38463F]">
-              {tenant?.logoUrl ? (
-                <img
-                  src={tenant.logoUrl}
-                  alt={tenant.name}
-                  className="max-w-full max-h-full object-contain"
-                />
-              ) : (
-                <span>{tenant?.name?.slice(0, 1).toUpperCase() || session?.companyName?.slice(0, 1).toUpperCase() || "G"}</span>
-              )}
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#556B5D] flex items-center justify-center text-white shadow-xs shrink-0">
+              <Shirt className="w-4 h-4" />
             </div>
-            <div className="min-w-0">
-              <h1 className="font-bold text-sm text-white truncate tracking-tight">
-                {tenant?.name || session?.companyName || "Guayabera Manager"}
-              </h1>
-              <span className="block text-xs text-[#8FA393] truncate font-medium">
-                Plataforma de Gestión
+            <div>
+              <span className="font-extrabold text-xs text-white uppercase tracking-wider font-[Outfit] block leading-tight">
+                Menú Principal
+              </span>
+              <span className="text-[10px] text-[#8FA393] font-medium block">
+                Sistema de Gestión
               </span>
             </div>
           </div>

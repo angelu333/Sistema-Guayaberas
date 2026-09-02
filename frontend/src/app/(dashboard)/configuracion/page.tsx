@@ -24,8 +24,10 @@ import { useTenantStore } from "@/stores/tenant.store";
 import { settingsService, type UpdateTenantDTO } from "@/services/settings.service";
 import { BrandLogoUploader } from "@/components/configuracion/BrandLogoUploader";
 import { NotificationsSettings } from "@/components/configuracion/NotificationsSettings";
+import { CatalogsSettings } from "@/components/configuracion/CatalogsSettings";
+import { Palette } from "lucide-react";
 
-type SettingsTab = "company" | "profile" | "notifications";
+type SettingsTab = "company" | "catalogs" | "profile" | "notifications";
 
 export default function SettingsPage() {
   const { session, setSession } = useAuthStore();
@@ -216,7 +218,7 @@ export default function SettingsPage() {
 
       <div className="page-container space-y-6">
         {/* Navegación por Pestañas */}
-        <div className="flex items-center gap-2 border-b border-[#DDD9D0] pb-2">
+        <div className="flex flex-wrap items-center gap-2 border-b border-[#DDD9D0] pb-2">
           <button
             onClick={() => setActiveTab("company")}
             className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
@@ -227,6 +229,18 @@ export default function SettingsPage() {
           >
             <Building2 className="w-4 h-4" />
             Identidad de Marca y Empresa
+          </button>
+
+          <button
+            onClick={() => setActiveTab("catalogs")}
+            className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              activeTab === "catalogs"
+                ? "bg-[#556B5D] text-white shadow-sm"
+                : "bg-white text-[#6B7A71] hover:text-[#26302B] border border-[#DDD9D0]"
+            }`}
+          >
+            <Palette className="w-4 h-4" />
+            Catálogos de Prendas (Colores / Tallas)
           </button>
 
           <button
@@ -505,6 +519,13 @@ export default function SettingsPage() {
                   </form>
                 </Card>
               </div>
+            )}
+
+            {/* ============================================================
+                PESTAÑA 2: CATÁLOGOS DE PRENDAS (Colores, Tallas, Categorías)
+                ============================================================ */}
+            {activeTab === "catalogs" && (
+              <CatalogsSettings tenantId={tenant?.id || session?.tenantId || ""} />
             )}
 
             {/* ============================================================

@@ -51,6 +51,18 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   const [newCategoryName, setNewCategoryName] = useState("");
   const [creatingCategoryLoading, setCreatingCategoryLoading] = useState(false);
 
+  // Creación rápida de color
+  const [isCreatingColor, setIsCreatingColor] = useState(false);
+  const [newColorName, setNewColorName] = useState("");
+  const [newColorHex, setNewColorHex] = useState("#26302B");
+  const [creatingColorLoading, setCreatingColorLoading] = useState(false);
+
+  // Creación rápida de talla
+  const [isCreatingSize, setIsCreatingSize] = useState(false);
+  const [newSizeName, setNewSizeName] = useState("");
+  const [newSizeOrder, setNewSizeOrder] = useState<number>(50);
+  const [creatingSizeLoading, setCreatingSizeLoading] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       loadCatalogData();
@@ -91,6 +103,40 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
       setErrorMsg(err.message || "Error al crear la categoría.");
     } finally {
       setCreatingCategoryLoading(false);
+    }
+  };
+
+  const handleQuickCreateColor = async () => {
+    if (!newColorName.trim()) return;
+    if (!session?.tenantId) return;
+
+    setCreatingColorLoading(true);
+    try {
+      const created = await productsService.createColor(session.tenantId, newColorName, newColorHex);
+      setColors((prev) => [...prev, created]);
+      setNewColorName("");
+      setIsCreatingColor(false);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al crear el color.");
+    } finally {
+      setCreatingColorLoading(false);
+    }
+  };
+
+  const handleQuickCreateSize = async () => {
+    if (!newSizeName.trim()) return;
+    if (!session?.tenantId) return;
+
+    setCreatingSizeLoading(true);
+    try {
+      const created = await productsService.createSize(session.tenantId, newSizeName, Number(newSizeOrder) || 50);
+      setSizes((prev) => [...prev, created].sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)));
+      setNewSizeName("");
+      setIsCreatingSize(false);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al crear la talla.");
+    } finally {
+      setCreatingSizeLoading(false);
     }
   };
 
@@ -305,25 +351,110 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
 
           {/* Variantes del Producto */}
           <div className="space-y-3 pt-2 border-t border-[#DDD9D0]">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
                 <h3 className="text-sm font-semibold text-[#26302B] font-[Outfit]">
                   Variantes de Producto (Combinaciones)
                 </h3>
                 <p className="text-xs text-[#6B7A71]">
-                  Cada variante representa un color, talla y SKU especifico
+                  Cada variante representa un color, talla, manga y SKU específico
                 </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleAddVariantRow}
-              >
-                <Plus className="w-4 h-4 mr-1" />
-                Agregar Variante
-              </Button>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingColor(true)}
+                  className="px-2.5 py-1 text-xs font-bold text-[#556B5D] bg-[#EBF0EC] hover:bg-[#dce6de] rounded-lg transition-colors cursor-pointer"
+                >
+                  + Nuevo Color
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreatingSize(true)}
+                  className="px-2.5 py-1 text-xs font-bold text-[#556B5D] bg-[#EBF0EC] hover:bg-[#dce6de] rounded-lg transition-colors cursor-pointer"
+                >
+                  + Nueva Talla
+                </button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddVariantRow}
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Agregar Fila
+                </Button>
+              </div>
             </div>
+
+            {/* Mini Popup Inline para Nuevo Color */}
+            {isCreatingColor && (
+              <div className="p-3 bg-[#FAF7F2] border border-[#556B5D] rounded-xl flex flex-wrap items-center gap-2 animate-fade-in text-xs">
+                <span className="font-bold text-[#26302B]">Nuevo Color:</span>
+                <input
+                  type="text"
+                  placeholder="Nombre (ej: Hueso, Coral)..."
+                  value={newColorName}
+                  onChange={(e) => setNewColorName(e.target.value)}
+                  className="px-2.5 py-1 bg-white border border-[#DDD9D0] rounded-lg text-xs"
+                  autoFocus
+                />
+                <input
+                  type="color"
+                  value={newColorHex}
+                  onChange={(e) => setNewColorHex(e.target.value)}
+                  className="w-7 h-7 rounded-lg border border-[#DDD9D0] cursor-pointer p-0.5"
+                  title="Elegir tono HEX"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#556B5D] text-white text-xs h-7 px-2.5"
+                  disabled={creatingColorLoading || !newColorName.trim()}
+                  onClick={handleQuickCreateColor}
+                >
+                  {creatingColorLoading ? "..." : "Guardar Color"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingColor(false); setNewColorName(""); }}
+                  className="text-[#6B7A71] hover:text-[#26302B] px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Mini Popup Inline para Nueva Talla */}
+            {isCreatingSize && (
+              <div className="p-3 bg-[#FAF7F2] border border-[#556B5D] rounded-xl flex flex-wrap items-center gap-2 animate-fade-in text-xs">
+                <span className="font-bold text-[#26302B]">Nueva Talla:</span>
+                <input
+                  type="text"
+                  placeholder="Talla (ej: 48, 50, XXL, 4 Infantil)..."
+                  value={newSizeName}
+                  onChange={(e) => setNewSizeName(e.target.value)}
+                  className="px-2.5 py-1 bg-white border border-[#DDD9D0] rounded-lg text-xs"
+                  autoFocus
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#556B5D] text-white text-xs h-7 px-2.5"
+                  disabled={creatingSizeLoading || !newSizeName.trim()}
+                  onClick={handleQuickCreateSize}
+                >
+                  {creatingSizeLoading ? "..." : "Guardar Talla"}
+                </Button>
+                <button
+                  type="button"
+                  onClick={() => { setIsCreatingSize(false); setNewSizeName(""); }}
+                  className="text-[#6B7A71] hover:text-[#26302B] px-1"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
 
             <div className="space-y-3">
               {variants.map((v, idx) => (

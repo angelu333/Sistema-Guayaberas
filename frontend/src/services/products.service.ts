@@ -365,6 +365,19 @@ export const productsService = {
   },
 
   /**
+   * Elimina/Desactiva una categoría
+   */
+  async deleteCategory(id: string): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("categorias")
+      .update({ is_active: false })
+      .eq("id", id);
+
+    if (error) throw new Error(`Error al eliminar categoría: ${error.message}`);
+  },
+
+  /**
    * Obtiene los colores del tenant
    */
   async getColors(): Promise<Color[]> {
@@ -383,6 +396,49 @@ export const productsService = {
       hexCode: c.hex_code,
       isActive: c.is_active,
     }));
+  },
+
+  /**
+   * Crea un nuevo color para la empresa
+   */
+  async createColor(tenantId: string, name: string, hexCode?: string): Promise<Color> {
+    const supabase = createClient();
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("El nombre del color es requerido.");
+
+    const { data, error } = await supabase
+      .from("colores")
+      .insert({
+        tenant_id: tenantId,
+        name: cleanName,
+        hex_code: hexCode || null,
+        is_active: true,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(`Error al crear color: ${error.message}`);
+
+    return {
+      id: data.id,
+      tenantId: data.tenant_id,
+      name: data.name,
+      hexCode: data.hex_code,
+      isActive: data.is_active,
+    };
+  },
+
+  /**
+   * Elimina/Desactiva un color
+   */
+  async deleteColor(id: string): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("colores")
+      .update({ is_active: false })
+      .eq("id", id);
+
+    if (error) throw new Error(`Error al eliminar color: ${error.message}`);
   },
 
   /**
@@ -407,6 +463,49 @@ export const productsService = {
   },
 
   /**
+   * Crea una nueva talla para la empresa
+   */
+  async createSize(tenantId: string, name: string, sortOrder?: number): Promise<Size> {
+    const supabase = createClient();
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("El nombre de la talla es requerido.");
+
+    const { data, error } = await supabase
+      .from("tallas")
+      .insert({
+        tenant_id: tenantId,
+        name: cleanName,
+        sort_order: sortOrder ?? 50,
+        is_active: true,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(`Error al crear talla: ${error.message}`);
+
+    return {
+      id: data.id,
+      tenantId: data.tenant_id,
+      name: data.name,
+      sortOrder: data.sort_order,
+      isActive: data.is_active,
+    };
+  },
+
+  /**
+   * Elimina/Desactiva una talla
+   */
+  async deleteSize(id: string): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("tallas")
+      .update({ is_active: false })
+      .eq("id", id);
+
+    if (error) throw new Error(`Error al eliminar talla: ${error.message}`);
+  },
+
+  /**
    * Obtiene los tipos de manga del tenant
    */
   async getSleeveTypes(): Promise<SleeveType[]> {
@@ -424,6 +523,34 @@ export const productsService = {
       name: m.name,
       isActive: m.is_active,
     }));
+  },
+
+  /**
+   * Crea un nuevo tipo de manga
+   */
+  async createSleeveType(tenantId: string, name: string): Promise<SleeveType> {
+    const supabase = createClient();
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("El nombre del tipo de manga es requerido.");
+
+    const { data, error } = await supabase
+      .from("tipos_manga")
+      .insert({
+        tenant_id: tenantId,
+        name: cleanName,
+        is_active: true,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(`Error al crear tipo de manga: ${error.message}`);
+
+    return {
+      id: data.id,
+      tenantId: data.tenant_id,
+      name: data.name,
+      isActive: data.is_active,
+    };
   },
 
   /**
