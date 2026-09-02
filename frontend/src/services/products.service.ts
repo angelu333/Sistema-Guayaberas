@@ -15,6 +15,7 @@ export interface CreateProductDTO {
   imageUrl?: string;
   images?: { url: string; isPrimary: boolean }[];
   variants: CreateVariantDTO[];
+  locationId?: string; // Sucursal donde se asignará el stock inicial
 }
 
 export interface CreateVariantDTO {
@@ -25,6 +26,7 @@ export interface CreateVariantDTO {
   costPrice: number;
   salePrice: number;
   minStock?: number;
+  initialStock?: number; // Piezas físicas en la sucursal al dar de alta
 }
 
 export interface ProductFilters {
@@ -269,6 +271,55 @@ export const productsService = {
         throw new Error("Uno de los SKU especificados ya existe en su inventario.");
       }
       throw new Error(`Error al crear las variantes: ${variantError.message}`);
+    }
+
+    // 4. Si hay stock inicial y una ubicación definida, insertar existencias
+    if (dto.locationId && dto.variants.some(v => (v.initialStock ?? 0) > 0)) {
+      // Obtener los IDs de las variantes recién creadas por SKU
+      const { data: createdVariants } = await supabase
+        .from("variantes_producto")
+        .select("id, sku")
+        .eq("product_id", product.id);
+
+      if (createdVariants && createdVariants.length > 0) {
+        // Insertar movimiento ENTRADA por cada variante con stock > 0
+        type MovRow = {
+          tenant_id: string;
+          variant_id: string;
+          location_id: string;
+          type: string;
+          quantity: number;
+          reason: string;
+          user_id: null;
+        };
+
+        const movimientosRows: MovRow[] = createdVariants
+          .map((cv: any) => {
+            const dtoVariant = dto.variants.find(v => v.sku.toUpperCase().trim() === cv.sku);
+            const qty = dtoVariant?.initialStock ?? 0;
+            if (qty <= 0 || !dto.locationId) return null;
+            return {
+              tenant_id: tenantId,
+              variant_id: cv.id as string,
+              location_id: dto.locationId as string,
+              type: "ENTRADA",
+              quantity: qty,
+              reason: "Carga inicial de inventario al registrar producto",
+              user_id: null,
+            } as MovRow;
+          })
+          .filter((v): v is MovRow => v !== null);
+
+        if (movimientosRows.length > 0) {
+          const { error: movErr } = await supabase
+            .from("movimientos_inventario")
+            .insert(movimientosRows);
+
+          if (movErr) {
+            console.warn("Stock inicial no pudo registrarse:", movErr.message);
+          }
+        }
+      }
     }
 
     return product.id;

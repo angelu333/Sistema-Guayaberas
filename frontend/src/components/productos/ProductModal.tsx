@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus, Trash2, MapPin, PackagePlus } from "lucide-react";
 
 import { Button, Input, Card } from "@/components/ui";
 import {
   productsService,
   CreateVariantDTO,
 } from "@/services/products.service";
-import { Category, Color, Size, SleeveType } from "@/types/domain.types";
+import { inventoryService } from "@/services/inventory.service";
+import { Category, Color, Size, SleeveType, Location } from "@/types/domain.types";
 import { useAuthStore } from "@/stores/auth.store";
 import { ImageGalleryUploader, type UploadedImage } from "@/components/productos/ImageGalleryUploader";
 
@@ -31,6 +32,10 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   const [categoryId, setCategoryId] = useState("");
   const [images, setImages] = useState<UploadedImage[]>([]);
 
+  // Sucursal de destino para el stock inicial
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState("");
+
   const [variants, setVariants] = useState<CreateVariantDTO[]>([
     {
       colorId: "",
@@ -40,6 +45,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
       costPrice: 350,
       salePrice: 750,
       minStock: 5,
+      initialStock: 0,
     },
   ]);
 
@@ -72,17 +78,24 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
 
   const loadCatalogData = async () => {
     try {
-      const [cats, cols, szs, slvs] = await Promise.all([
+      const tenantId = session?.tenantId;
+      const [cats, cols, szs, slvs, locs] = await Promise.all([
         productsService.getCategories(),
         productsService.getColors(),
         productsService.getSizes(),
         productsService.getSleeveTypes(),
+        tenantId ? inventoryService.getLocations(tenantId) : Promise.resolve([]),
       ]);
 
       setCategories(cats);
       setColors(cols);
       setSizes(szs);
       setSleeveTypes(slvs);
+      setLocations(locs);
+      // Seleccionar la primera ubicación por defecto
+      if (locs.length > 0 && !selectedLocationId) {
+        setSelectedLocationId(locs[0].id);
+      }
     } catch (err) {
       console.error("Error al cargar catalogos auxiliares:", err);
     }
@@ -160,6 +173,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
         costPrice: 350,
         salePrice: 750,
         minStock: 5,
+        initialStock: 0,
       },
     ]);
   };
@@ -213,6 +227,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
         description,
         categoryId: categoryId || undefined,
         variants,
+        locationId: selectedLocationId || undefined,
       });
 
       onSuccess();
@@ -460,7 +475,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
               {variants.map((v, idx) => (
                 <div
                   key={idx}
-                  className="p-4 rounded-lg bg-[#F8F6F1] border border-[#DDD9D0] grid grid-cols-1 sm:grid-cols-6 gap-3 items-end"
+                  className="p-4 rounded-xl bg-[#F8F6F1] border border-[#DDD9D0] grid grid-cols-2 sm:grid-cols-7 gap-3 items-end"
                 >
                   <div className="sm:col-span-1">
                     <label className="text-xs font-medium text-[#6B7A71] block mb-1">Color</label>
@@ -515,7 +530,7 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
 
                   <div className="sm:col-span-1">
                     <Input
-                      label="Precio Venta ($)"
+                      label="Precio ($)"
                       type="number"
                       value={v.salePrice}
                       onChange={(e) => handleVariantChange(idx, "salePrice", Number(e.target.value))}
@@ -523,7 +538,23 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
                     />
                   </div>
 
-                  <div className="sm:col-span-1 flex items-center justify-end">
+                  {/* ★ CAMPO NUEVO: Stock Inicial */}
+                  <div className="sm:col-span-1">
+                    <label className="text-xs font-bold text-[#3F7D58] block mb-1 flex items-center gap-1">
+                      <PackagePlus className="w-3 h-3" />
+                      Stock Inicial
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={v.initialStock ?? 0}
+                      onChange={(e) => handleVariantChange(idx, "initialStock", Number(e.target.value))}
+                      className="w-full rounded-md border border-[#A7D7B9] bg-[#EBF5F0] px-2 py-1.5 text-xs font-bold text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#3F7D58]/30"
+                      placeholder="0"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-1 flex items-end justify-end">
                     <button
                       type="button"
                       disabled={variants.length <= 1}
@@ -536,6 +567,34 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
                   </div>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* === SELECTOR DE SUCURSAL DE DESTINO PARA STOCK INICIAL === */}
+          <div className="p-4 bg-[#EBF5F0] border border-[#A7D7B9] rounded-2xl flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-[#3F7D58] text-white flex items-center justify-center shrink-0">
+                <PackagePlus className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-xs font-extrabold text-[#26302B] font-[Outfit]">Stock Inicial</p>
+                <p className="text-[10px] text-[#6B7A71]">
+                  Las piezas se registrarán automáticamente en el inventario de:
+                </p>
+              </div>
+            </div>
+            <div className="flex-1 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#3F7D58] shrink-0" />
+              <select
+                value={selectedLocationId}
+                onChange={(e) => setSelectedLocationId(e.target.value)}
+                className="w-full text-xs font-bold text-[#26302B] border border-[#A7D7B9] bg-white rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#3F7D58]/30"
+              >
+                <option value="">-- Sin stock inicial --</option>
+                {locations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>{loc.name}</option>
+                ))}
+              </select>
             </div>
           </div>
 
