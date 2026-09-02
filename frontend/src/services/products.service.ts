@@ -30,6 +30,7 @@ export interface CreateVariantDTO {
 }
 
 export interface ProductFilters {
+  tenantId?: string;
   search?: string;
   categoryId?: string;
   colorId?: string;
@@ -77,12 +78,12 @@ export const productsService = {
       `)
       .order("created_at", { ascending: false });
 
-    if (filters?.isActive !== undefined) {
-      query = query.eq("is_active", filters.isActive);
+    if (filters?.tenantId) {
+      query = query.eq("tenant_id", filters.tenantId);
     }
 
-    if (filters?.categoryId) {
-      query = query.eq("productos.category_id", filters.categoryId);
+    if (filters?.isActive !== undefined) {
+      query = query.eq("is_active", filters.isActive);
     }
 
     if (filters?.colorId) {
@@ -192,6 +193,13 @@ export const productsService = {
           stockByLocation: stockMap.get(v.id)?.locations ?? [],
         }));
       }
+    }
+
+    // Filtro por categoria si se provee
+    if (filters?.categoryId) {
+      variants = variants.filter(
+        (v) => v.product?.categoryId === filters.categoryId
+      );
     }
 
     // Filtro rapido en memoria si se provee busqueda
@@ -370,13 +378,19 @@ export const productsService = {
   /**
    * Obtiene las categorias del tenant
    */
-  async getCategories(): Promise<Category[]> {
+  async getCategories(tenantId?: string): Promise<Category[]> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("categorias")
       .select("*")
       .eq("is_active", true)
       .order("name");
+
+    if (tenantId) {
+      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return (data || []).map((c: any) => ({
@@ -431,13 +445,19 @@ export const productsService = {
   /**
    * Obtiene los colores del tenant
    */
-  async getColors(): Promise<Color[]> {
+  async getColors(tenantId?: string): Promise<Color[]> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("colores")
       .select("*")
       .eq("is_active", true)
       .order("name");
+
+    if (tenantId) {
+      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return (data || []).map((c: any) => ({
@@ -495,13 +515,19 @@ export const productsService = {
   /**
    * Obtiene las tallas del tenant
    */
-  async getSizes(): Promise<Size[]> {
+  async getSizes(tenantId?: string): Promise<Size[]> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("tallas")
       .select("*")
       .eq("is_active", true)
       .order("sort_order", { ascending: true });
+
+    if (tenantId) {
+      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return (data || []).map((s: any) => ({
@@ -559,13 +585,19 @@ export const productsService = {
   /**
    * Obtiene los tipos de manga del tenant
    */
-  async getSleeveTypes(): Promise<SleeveType[]> {
+  async getSleeveTypes(tenantId?: string): Promise<SleeveType[]> {
     const supabase = createClient();
-    const { data, error } = await supabase
+    let query = supabase
       .from("tipos_manga")
       .select("*")
       .eq("is_active", true)
       .order("name");
+
+    if (tenantId) {
+      query = query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new Error(error.message);
     return (data || []).map((m: any) => ({

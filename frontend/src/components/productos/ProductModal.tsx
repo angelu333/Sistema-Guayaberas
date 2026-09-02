@@ -80,10 +80,10 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
     try {
       const tenantId = session?.tenantId;
       const [cats, cols, szs, slvs, locs] = await Promise.all([
-        productsService.getCategories(),
-        productsService.getColors(),
-        productsService.getSizes(),
-        productsService.getSleeveTypes(),
+        productsService.getCategories(tenantId),
+        productsService.getColors(tenantId),
+        productsService.getSizes(tenantId),
+        productsService.getSleeveTypes(tenantId),
         tenantId ? inventoryService.getLocations(tenantId) : Promise.resolve([]),
       ]);
 

@@ -52,9 +52,9 @@ export function CatalogsSettings({ tenantId }: CatalogsSettingsProps) {
     setLoading(true);
     try {
       const [c, t, cat] = await Promise.all([
-        productsService.getColors(),
-        productsService.getSizes(),
-        productsService.getCategories(),
+        productsService.getColors(tenantId),
+        productsService.getSizes(tenantId),
+        productsService.getCategories(tenantId),
       ]);
       setColores(c);
       setTallas(t);

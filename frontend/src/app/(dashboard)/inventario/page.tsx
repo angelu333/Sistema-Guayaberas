@@ -113,14 +113,16 @@ function InventarioYProductosContent() {
   }, [effectiveTenantId, isSeller, sellerLocationId, selectedLocationId, isAdmin, locations]);
 
   const loadProductsData = useCallback(async () => {
+    if (!effectiveTenantId) return;
     setLoadingProducts(true);
     try {
       const [prods, cats] = await Promise.all([
         productsService.getProducts({
+          tenantId: effectiveTenantId,
           search: productSearch || undefined,
           categoryId: selectedCategory || undefined,
         }),
-        productsService.getCategories(),
+        productsService.getCategories(effectiveTenantId),
       ]);
       setVariants(prods);
       setCategories(cats);
@@ -129,7 +131,7 @@ function InventarioYProductosContent() {
     } finally {
       setLoadingProducts(false);
     }
-  }, [productSearch, selectedCategory]);
+  }, [effectiveTenantId, productSearch, selectedCategory]);
 
   useEffect(() => {
     loadInventoryData();

@@ -81,7 +81,7 @@ export function QuoteEditModal({
       setItems(mapped);
 
       // Cargar variantes activas para el selector
-      productsService.getProducts({ isActive: true }).then((vars) => {
+      productsService.getProducts({ tenantId, isActive: true }).then((vars) => {
         setAllVariants(vars);
       });
     }
