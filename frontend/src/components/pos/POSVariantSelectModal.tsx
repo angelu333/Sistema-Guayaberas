@@ -33,6 +33,7 @@ export function POSVariantSelectModal({
   onAddToCart,
 }: POSVariantSelectModalProps) {
   const [selectedColor, setSelectedColor] = useState<string>("");
+  const [selectedSleeve, setSelectedSleeve] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
 
@@ -42,13 +43,26 @@ export function POSVariantSelectModal({
       const firstColor = product.availableColors[0]?.name || "";
       setSelectedColor(firstColor);
 
-      // Tallas disponibles para el primer color
-      const sizes = product.variants
+      // Mangas disponibles para el primer color
+      const sleeves = product.variants
         .filter((v) => !firstColor || v.color?.name === firstColor)
+        .map((v) => v.sleeveType?.name)
+        .filter(Boolean) as string[];
+      const uniqueSleeves = Array.from(new Set(sleeves));
+      const firstSleeve = uniqueSleeves[0] || "";
+      setSelectedSleeve(firstSleeve);
+
+      // Tallas disponibles para el primer color y primer tipo de manga
+      const sizes = product.variants
+        .filter(
+          (v) =>
+            (!firstColor || v.color?.name === firstColor) &&
+            (!firstSleeve || v.sleeveType?.name === firstSleeve)
+        )
         .map((v) => v.size?.name)
         .filter(Boolean) as string[];
-      const unique = Array.from(new Set(sizes));
-      setSelectedSize(unique[0] || "");
+      const uniqueSizes = Array.from(new Set(sizes));
+      setSelectedSize(uniqueSizes[0] || "");
       setQuantity(1);
     }
   }, [isOpen, product]);
@@ -57,12 +71,27 @@ export function POSVariantSelectModal({
 
   const currentColor = selectedColor || product.availableColors[0]?.name || "";
 
-  // Tallas reactivas que existen EXCLUSIVAMENTE para el color seleccionado
-  const sizesForCurrentColor = product.variants
+  // Mangas reactivas para el color seleccionado
+  const sleevesForColor = product.variants
     .filter((v) => !currentColor || v.color?.name === currentColor)
+    .map((v) => v.sleeveType?.name)
+    .filter(Boolean) as string[];
+  const availableSleeves = Array.from(new Set(sleevesForColor));
+  const currentSleeve =
+    selectedSleeve && availableSleeves.includes(selectedSleeve)
+      ? selectedSleeve
+      : availableSleeves[0] || "";
+
+  // Tallas reactivas que existen para el Color + Tipo de Manga seleccionado
+  const sizesForColorAndSleeve = product.variants
+    .filter(
+      (v) =>
+        (!currentColor || v.color?.name === currentColor) &&
+        (!currentSleeve || v.sleeveType?.name === currentSleeve)
+    )
     .map((v) => v.size?.name)
     .filter(Boolean) as string[];
-  const availableSizes = Array.from(new Set(sizesForCurrentColor));
+  const availableSizes = Array.from(new Set(sizesForColorAndSleeve));
 
   const currentSize =
     selectedSize && availableSizes.includes(selectedSize)
@@ -73,6 +102,7 @@ export function POSVariantSelectModal({
   const matchingVariant = product.variants.find(
     (v) =>
       (!currentColor || v.color?.name === currentColor) &&
+      (!currentSleeve || v.sleeveType?.name === currentSleeve) &&
       (!currentSize || v.size?.name === currentSize)
   );
 
@@ -86,8 +116,31 @@ export function POSVariantSelectModal({
 
   const handleColorSelect = (colorName: string) => {
     setSelectedColor(colorName);
-    const validSizes = product.variants
+    
+    // Recalcular mangas disponibles
+    const sleeves = product.variants
       .filter((v) => v.color?.name === colorName)
+      .map((v) => v.sleeveType?.name)
+      .filter(Boolean) as string[];
+    const uniqueSleeves = Array.from(new Set(sleeves));
+    const newSleeve = uniqueSleeves.includes(selectedSleeve) ? selectedSleeve : uniqueSleeves[0] || "";
+    setSelectedSleeve(newSleeve);
+
+    // Recalcular tallas
+    const validSizes = product.variants
+      .filter((v) => v.color?.name === colorName && (!newSleeve || v.sleeveType?.name === newSleeve))
+      .map((v) => v.size?.name)
+      .filter(Boolean) as string[];
+    const unique = Array.from(new Set(validSizes));
+    if (!unique.includes(selectedSize)) {
+      setSelectedSize(unique[0] || "");
+    }
+  };
+
+  const handleSleeveSelect = (sleeveName: string) => {
+    setSelectedSleeve(sleeveName);
+    const validSizes = product.variants
+      .filter((v) => (!currentColor || v.color?.name === currentColor) && v.sleeveType?.name === sleeveName)
       .map((v) => v.size?.name)
       .filter(Boolean) as string[];
     const unique = Array.from(new Set(validSizes));
@@ -122,7 +175,7 @@ export function POSVariantSelectModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 text-[#6B7A71] hover:text-[#26302B] hover:bg-[#E7E3DA] rounded-xl transition-colors"
+            className="p-1.5 text-[#6B7A71] hover:text-[#26302B] hover:bg-[#E7E3DA] rounded-xl transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -156,7 +209,7 @@ export function POSVariantSelectModal({
                   <div className="flex items-center gap-1 text-[#3F7D58]">
                     <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                     <span className="text-[11px] font-bold">
-                      Stock en tu tienda: {localStock} piezas
+                      Stock en tienda: {localStock} piezas
                     </span>
                   </div>
                 ) : hasOtherStock ? (
@@ -190,7 +243,7 @@ export function POSVariantSelectModal({
                     key={c.name}
                     type="button"
                     onClick={() => handleColorSelect(c.name)}
-                    className={`px-3 py-1.5 text-xs font-medium rounded-xl border flex items-center gap-1.5 transition-all ${
+                    className={`px-3 py-1.5 text-xs font-medium rounded-xl border flex items-center gap-1.5 transition-all cursor-pointer ${
                       currentColor === c.name
                         ? "bg-[#556B5D] text-white border-[#556B5D] shadow-xs font-bold scale-105"
                         : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
@@ -209,23 +262,51 @@ export function POSVariantSelectModal({
             </div>
           )}
 
-          {/* 2. Selector Reactivo de Tallas */}
+          {/* 2. Selector de Tipo de Manga (Corta / Larga) */}
+          {availableSleeves.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-bold text-[#26302B]">
+                2. Tipo de Manga: <span className="font-normal text-[#556B5D] font-bold">{currentSleeve}</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {availableSleeves.map((slv) => (
+                  <button
+                    key={slv}
+                    type="button"
+                    onClick={() => handleSleeveSelect(slv)}
+                    className={`px-3.5 py-1.5 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
+                      currentSleeve === slv
+                        ? "bg-[#26302B] text-white border-[#26302B] shadow-xs scale-105"
+                        : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
+                    }`}
+                  >
+                    {slv}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 3. Selector Reactivo de Tallas */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold text-[#26302B]">
-              2. Talla en {currentColor}:{" "}
+              3. Talla ({currentColor}{currentSleeve ? ` · ${currentSleeve}` : ""}):{" "}
               <span className="font-normal text-[#556B5D] font-bold">{currentSize}</span>
             </label>
             {availableSizes.length === 0 ? (
               <div className="p-2.5 bg-[#FAEAEA] border border-[#B85450]/20 rounded-xl flex items-center gap-2 text-xs text-[#B85450]">
                 <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>No hay tallas registradas en este color.</span>
+                <span>No hay tallas registradas en esta combinación.</span>
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
                 {availableSizes.map((sz) => {
                   const isSelected = currentSize === sz;
                   const v = product.variants.find(
-                    (item) => item.color?.name === currentColor && item.size?.name === sz
+                    (item) =>
+                      item.color?.name === currentColor &&
+                      (!currentSleeve || item.sleeveType?.name === currentSleeve) &&
+                      item.size?.name === sz
                   );
                   const vLocal = (v as any)?.localStock ?? (v?.totalStock ?? 0);
                   const vOther = (v as any)?.otherStock ?? 0;
@@ -235,9 +316,9 @@ export function POSVariantSelectModal({
                       key={sz}
                       type="button"
                       onClick={() => setSelectedSize(sz)}
-                      className={`min-w-[54px] h-11 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all ${
+                      className={`min-w-[54px] h-11 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
                         isSelected
-                          ? "bg-[#26302B] text-white border-[#26302B] shadow-md scale-105"
+                          ? "bg-[#556B5D] text-white border-[#556B5D] shadow-md scale-105"
                           : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
                       }`}
                     >
@@ -260,7 +341,7 @@ export function POSVariantSelectModal({
             )}
           </div>
 
-          {/* 3. Selector de Cantidad */}
+          {/* 4. Selector de Cantidad */}
           <div className="pt-2 border-t border-[#DDD9D0] flex items-center justify-between">
             <div>
               <span className="text-xs font-bold text-[#26302B] block">Cantidad a cobrar:</span>
@@ -274,7 +355,7 @@ export function POSVariantSelectModal({
               <button
                 type="button"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                className="w-8 h-8 rounded-lg bg-white text-[#26302B] font-bold flex items-center justify-center shadow-xs"
+                className="w-8 h-8 rounded-lg bg-white text-[#26302B] font-bold flex items-center justify-center shadow-xs cursor-pointer"
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -284,7 +365,7 @@ export function POSVariantSelectModal({
               <button
                 type="button"
                 onClick={() => setQuantity((q) => Math.min(99, q + 1))}
-                className="w-8 h-8 rounded-lg bg-[#556B5D] text-white font-bold flex items-center justify-center shadow-xs"
+                className="w-8 h-8 rounded-lg bg-[#556B5D] text-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
               </button>

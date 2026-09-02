@@ -40,6 +40,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     modelos: [],
     colores: [],
     tallas: [],
+    mangas: [],
   });
 
   const [variants, setVariants] = useState<ProductVariant[]>([]);
@@ -54,6 +55,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
   const [searchText, setSearchText] = useState("");
 
   const selectedModelo = searchParams.get("modelo") || "";
+  const selectedManga = searchParams.get("manga") || "";
   const selectedTalla = searchParams.get("talla") || "";
   const selectedColor = searchParams.get("color") || "";
 
@@ -67,6 +69,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
       publicCatalogService.getPublicFilterOptions(tenant.id),
       publicCatalogService.getPublicCatalog(tenant.id, {
         modelo: selectedModelo || undefined,
+        manga: selectedManga || undefined,
         talla: selectedTalla || undefined,
         color: selectedColor || undefined,
       }),
@@ -75,7 +78,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     setVariants(catalog);
     setGroupedProducts(publicCatalogService.groupProductsForCatalog(catalog));
     setLoading(false);
-  }, [slug, selectedModelo, selectedTalla, selectedColor]);
+  }, [slug, selectedModelo, selectedManga, selectedTalla, selectedColor]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -85,7 +88,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const updateFilters = (key: "modelo" | "talla" | "color", value: string) => {
+  const updateFilters = (key: "modelo" | "talla" | "color" | "manga", value: string) => {
     const params = new URLSearchParams(searchParams.toString());
     if (value) params.set(key, value);
     else params.delete(key);
@@ -143,7 +146,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     });
   }, [groupedProducts, searchText]);
 
-  const hasActiveFilters = !!(selectedModelo || selectedTalla || selectedColor || searchText);
+  const hasActiveFilters = !!(selectedModelo || selectedManga || selectedTalla || selectedColor || searchText);
 
   if (!tenantInfo && !loading) {
     return (
@@ -275,12 +278,12 @@ function PublicCatalogContent({ slug }: { slug: string }) {
             )}
           </div>
 
-          {/* Grid de 3 Selects Desplegables */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Grid de 4 Selects Desplegables */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
             {/* 1. SELECT MODELO */}
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
-                Modelo / Guayabera
+                Modelo
               </label>
               <select
                 value={selectedModelo}
@@ -297,7 +300,27 @@ function PublicCatalogContent({ slug }: { slug: string }) {
               </select>
             </div>
 
-            {/* 2. SELECT TALLA */}
+            {/* 2. SELECT TIPO DE MANGA */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
+                Manga
+              </label>
+              <select
+                value={selectedManga}
+                onChange={(e) => updateFilters("manga", e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs font-semibold rounded-xl border bg-[#FAF7F2] text-[#26302B] focus:outline-none focus:border-[#556B5D] cursor-pointer transition-all"
+                style={{ borderColor: selectedManga ? "#556B5D" : "#E4DDD1" }}
+              >
+                <option value="">Todas las mangas</option>
+                {filterOptions.mangas.map((sl) => (
+                  <option key={sl.id} value={sl.name}>
+                    {sl.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. SELECT TALLA */}
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
                 Talla
@@ -317,7 +340,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
               </select>
             </div>
 
-            {/* 3. SELECT COLOR */}
+            {/* 4. SELECT COLOR */}
             <div className="flex flex-col gap-1">
               <label className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
                 Color
@@ -512,19 +535,30 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                       </div>
                     )}
 
-                    {/* Tallas disponibles */}
-                    {p.availableSizes.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {p.availableSizes.map((sz) => (
+                    {/* Mangas y Tallas disponibles */}
+                    <div className="flex flex-wrap items-center gap-1">
+                      {p.availableSleeves && p.availableSleeves.length > 0 && (
+                        p.availableSleeves.map((sl) => (
+                          <span
+                            key={sl}
+                            className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#EBF0EC] text-[#556B5D] border border-[#A7D7B9]/60"
+                          >
+                            {sl}
+                          </span>
+                        ))
+                      )}
+
+                      {p.availableSizes.length > 0 && (
+                        p.availableSizes.map((sz) => (
                           <span
                             key={sz}
-                            className="text-[10px] font-bold px-1.5 py-0.2 rounded border border-[#E4DDD1] text-[#556B5D] bg-[#F5EFE3]"
+                            className="text-[10px] font-bold px-1.5 py-0.2 rounded border border-[#E4DDD1] text-[#26302B] bg-[#F5EFE3]"
                           >
                             {sz}
                           </span>
-                        ))}
-                      </div>
-                    )}
+                        ))
+                      )}
+                    </div>
 
                     {/* Precio */}
                     <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#EDE7DA]">

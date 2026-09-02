@@ -184,7 +184,8 @@ function InventarioYProductosContent() {
       item.productName.toLowerCase().includes(q) ||
       item.categoryName.toLowerCase().includes(q) ||
       (item.colorName && item.colorName.toLowerCase().includes(q)) ||
-      (item.sizeName && item.sizeName.toLowerCase().includes(q))
+      (item.sizeName && item.sizeName.toLowerCase().includes(q)) ||
+      (item.sleeveTypeName && item.sleeveTypeName.toLowerCase().includes(q))
     );
   });
 
@@ -392,7 +393,15 @@ function InventarioYProductosContent() {
                     <tr key={item.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
                       <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{item.sku}</td>
                       <td className="py-3 px-4 font-medium">{item.productName}</td>
-                      <td className="py-3 px-4 text-xs text-[#6B7A71]">{[item.colorName, item.sizeName].filter(Boolean).join(" / ")}</td>
+                      <td className="py-3 px-4 text-xs text-[#6B7A71]">
+                        {[
+                          item.colorName,
+                          item.sizeName ? `Talla ${item.sizeName}` : null,
+                          item.sleeveTypeName,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </td>
                       {isAdmin && <td className="py-3 px-4 text-xs">{item.locationName}</td>}
                       <td className="py-3 px-4 text-right font-medium">${item.salePrice.toFixed(2)}</td>
                       <td className="py-3 px-4 text-center font-bold text-base">{item.quantity}</td>

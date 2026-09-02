@@ -41,23 +41,38 @@ export function ProductDetailModal({
 }: ProductDetailModalProps) {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedColor, setSelectedColor] = useState<string>("");
+  const [selectedSleeve, setSelectedSleeve] = useState<string>("");
   const [selectedSize, setSelectedSize] = useState<string>("");
   const [quantity, setQuantity] = useState(1);
   const [showSizeGuide, setShowSizeGuide] = useState(false);
   const [addedSuccess, setAddedSuccess] = useState(false);
   const [isZoomOpen, setIsZoomOpen] = useState(false);
 
-
   useEffect(() => {
     if (isOpen && product) {
       setActiveImageIndex(0);
       const firstColor = product.availableColors[0] || "";
       setSelectedColor(firstColor);
-      const sizesForFirstColor = product.variants
+
+      // Mangas disponibles para el primer color
+      const sleeves = product.variants
         .filter((v) => !firstColor || v.colorName === firstColor)
+        .map((v) => v.sleeveTypeName)
+        .filter(Boolean) as string[];
+      const uniqueSleeves = Array.from(new Set(sleeves));
+      const firstSleeve = uniqueSleeves[0] || "";
+      setSelectedSleeve(firstSleeve);
+
+      // Tallas disponibles para primer color y primer tipo de manga
+      const sizes = product.variants
+        .filter(
+          (v) =>
+            (!firstColor || v.colorName === firstColor) &&
+            (!firstSleeve || v.sleeveTypeName === firstSleeve)
+        )
         .map((v) => v.sizeName)
         .filter(Boolean) as string[];
-      const uniqueSizes = Array.from(new Set(sizesForFirstColor));
+      const uniqueSizes = Array.from(new Set(sizes));
       setSelectedSize(uniqueSizes[0] || "");
       setQuantity(1);
       setShowSizeGuide(false);
@@ -85,19 +100,39 @@ export function ProductDetailModal({
 
   const currentColor = selectedColor || product.availableColors[0] || "";
 
-  const sizesForCurrentColor = product.variants
+  // Mangas reactivas para el color seleccionado
+  const sleevesForColor = product.variants
     .filter((v) => !currentColor || v.colorName === currentColor)
+    .map((v) => v.sleeveTypeName)
+    .filter(Boolean) as string[];
+  const availableSleeves = Array.from(new Set(sleevesForColor));
+  const currentSleeve =
+    selectedSleeve && availableSleeves.includes(selectedSleeve)
+      ? selectedSleeve
+      : availableSleeves[0] || "";
+
+  // Tallas reactivas para Color + Tipo de Manga
+  const sizesForColorAndSleeve = product.variants
+    .filter(
+      (v) =>
+        (!currentColor || v.colorName === currentColor) &&
+        (!currentSleeve || v.sleeveTypeName === currentSleeve)
+    )
     .map((v) => v.sizeName)
     .filter(Boolean) as string[];
-  const availableSizes = Array.from(new Set(sizesForCurrentColor));
+  const availableSizes = Array.from(new Set(sizesForColorAndSleeve));
 
   const currentSize =
     selectedSize && availableSizes.includes(selectedSize)
       ? selectedSize
       : availableSizes[0] || "";
 
+  // Variante exacta
   const matchingVariant = product.variants.find(
-    (v) => (!currentColor || v.colorName === currentColor) && (!currentSize || v.sizeName === currentSize)
+    (v) =>
+      (!currentColor || v.colorName === currentColor) &&
+      (!currentSleeve || v.sleeveTypeName === currentSleeve) &&
+      (!currentSize || v.sizeName === currentSize)
   );
 
   const finalPrice = matchingVariant ? matchingVariant.salePrice : product.minPrice;
@@ -107,8 +142,29 @@ export function ProductDetailModal({
 
   const handleColorChange = (newColor: string) => {
     setSelectedColor(newColor);
-    const validSizes = product.variants
+    
+    // Recalcular mangas disponibles
+    const sleeves = product.variants
       .filter((v) => v.colorName === newColor)
+      .map((v) => v.sleeveTypeName)
+      .filter(Boolean) as string[];
+    const uniqueSleeves = Array.from(new Set(sleeves));
+    const newSleeve = uniqueSleeves.includes(selectedSleeve) ? selectedSleeve : uniqueSleeves[0] || "";
+    setSelectedSleeve(newSleeve);
+
+    // Recalcular tallas
+    const validSizes = product.variants
+      .filter((v) => v.colorName === newColor && (!newSleeve || v.sleeveTypeName === newSleeve))
+      .map((v) => v.sizeName)
+      .filter(Boolean) as string[];
+    const unique = Array.from(new Set(validSizes));
+    if (!unique.includes(selectedSize)) setSelectedSize(unique[0] || "");
+  };
+
+  const handleSleeveChange = (newSleeve: string) => {
+    setSelectedSleeve(newSleeve);
+    const validSizes = product.variants
+      .filter((v) => (!currentColor || v.colorName === currentColor) && v.sleeveTypeName === newSleeve)
       .map((v) => v.sizeName)
       .filter(Boolean) as string[];
     const unique = Array.from(new Set(validSizes));
@@ -125,15 +181,14 @@ export function ProductDetailModal({
     setActiveImageIndex((prev) => (prev === images.length - 1 ? 0 : prev + 1));
   };
 
-
   const handleAddToCartClick = () => {
     if (!onAddToCart || !matchingVariant || isOutOfStock) return;
 
     onAddToCart({
-      cartItemId: `${product.productId}-${currentColor}-${currentSize}`,
+      cartItemId: `${product.productId}-${currentColor}-${currentSleeve}-${currentSize}`,
       productId: product.productId,
       variantId: matchingVariant.variantId,
-      productName: product.name,
+      productName: `${product.name}${currentSleeve ? ` (${currentSleeve})` : ""}`,
       colorName: currentColor,
       sizeName: currentSize,
       unitPrice: finalPrice,
@@ -148,7 +203,6 @@ export function ProductDetailModal({
     }, 1200);
   };
 
-
   const handleSendWhatsApp = () => {
     const rawPhone = tenantWhatsapp || "";
     const phone = formatWhatsAppPhone(rawPhone);
@@ -161,6 +215,7 @@ export function ProductDetailModal({
       `¡Hola ${tenantName}! Me interesa adquirir lo siguiente:\n\n` +
       `Guayabera: ${product.name}\n` +
       `Color: ${currentColor || "Estándar"}\n` +
+      `Manga: ${currentSleeve || "Estándar"}\n` +
       `Talla: ${currentSize || "Estándar"}\n` +
       `Cantidad: ${quantity} pieza${quantity > 1 ? "s" : ""}\n` +
       `Total estimado: ${totalAmount} MXN\n\n` +
@@ -179,125 +234,105 @@ export function ProductDetailModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-3xl rounded-2xl flex flex-col md:flex-row max-h-[92vh] relative bg-white overflow-y-auto md:overflow-hidden"
-        style={{ boxShadow: "0 25px 60px rgba(38,48,43,0.35)" }}
+        className="w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row rounded-3xl overflow-hidden shadow-2xl bg-white animate-fade-in"
+        onClick={(e) => e.stopPropagation()}
       >
-        {/* Botón cerrar flotante en móvil */}
-        <button
-          onClick={onClose}
-          className="md:hidden absolute right-3 top-3 z-30 p-2 rounded-full shadow-md transition-colors"
-          style={{ color: "#26302B", backgroundColor: "rgba(255,255,255,0.9)" }}
-          title="Cerrar"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        {/* LADO IZQUIERDO: Galería de Fotos con Botón de Zoom */}
+        {/* ============================================================
+            PANEL IZQUIERDO: CARRUSEL DE IMÁGENES + ZOOM
+            ============================================================ */}
         <div
-          className="w-full md:w-[45%] flex flex-col shrink-0"
-          style={{ backgroundColor: "#F5EFE3" }}
+          className="relative w-full md:w-1/2 flex flex-col justify-between shrink-0"
+          style={{ backgroundColor: "#F5EFE3", minHeight: "320px" }}
         >
-          {/* Foto principal adaptable con zoom interactivo */}
-          <div
-            onClick={() => { if (images.length > 0) setIsZoomOpen(true); }}
-            className="relative w-full h-[300px] sm:h-[360px] md:h-full md:min-h-[400px] overflow-hidden group/img cursor-zoom-in"
-            title="Toca o haz clic para ver los bordados en detalle (Zoom)"
-          >
+          {/* Imagen Principal */}
+          <div className="relative flex-1 flex items-center justify-center overflow-hidden aspect-3/4 md:aspect-auto">
             {images.length > 0 ? (
               <img
                 src={images[activeImageIndex]}
                 alt={product.name}
-                className="w-full h-full object-cover object-top transition-transform duration-500 group-hover/img:scale-105"
+                className="w-full h-full object-cover object-top transition-all duration-300 cursor-zoom-in"
+                onClick={() => setIsZoomOpen(true)}
               />
             ) : (
-              <div
-                className="w-full h-full flex flex-col items-center justify-center gap-3"
-                style={{ color: "#C49A5A" }}
-              >
-                <Shirt className="w-20 h-20 stroke-1" />
-                <span className="text-xs font-medium" style={{ color: "#8B7D6B" }}>Sin fotografía</span>
+              <div className="flex flex-col items-center justify-center text-[#C49A5A] gap-2 p-8">
+                <Shirt className="w-16 h-16 stroke-1" />
+                <span className="text-xs text-[#8B7D6B]">Sin fotografía</span>
               </div>
             )}
 
-            {/* Badge Flotante "Ver Bordados (Zoom)" */}
+            {/* Botón Lupa / Zoom */}
             {images.length > 0 && (
-              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 pointer-events-none">
-                <span
-                  className="px-3.5 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-xl backdrop-blur-md text-white transition-all group-hover/img:scale-105"
-                  style={{
-                    backgroundColor: "rgba(38, 48, 43, 0.85)",
-                    border: "1px solid rgba(196, 154, 90, 0.6)",
-                  }}
-                >
-                  <ZoomIn className="w-3.5 h-3.5 text-[#C49A5A]" />
-                  <span>Ver Bordados (Zoom)</span>
-                </span>
-              </div>
+              <button
+                onClick={() => setIsZoomOpen(true)}
+                className="absolute top-4 left-4 p-2 rounded-xl bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
+                title="Ampliar imagen"
+              >
+                <ZoomIn className="w-4 h-4" />
+              </button>
             )}
 
-            {/* Flechas de navegación */}
+            {/* Flechas Carrusel */}
             {images.length > 1 && (
               <>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handlePrevImage(); }}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 z-10"
-                  style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
-                  title="Foto anterior"
+                  onClick={handlePrevImage}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
                 >
-                  <ChevronLeft className="w-5 h-5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={(e) => { e.stopPropagation(); handleNextImage(); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center shadow-lg transition-all hover:scale-105 z-10"
-                  style={{ backgroundColor: "rgba(255,255,255,0.92)", color: "#26302B" }}
-                  title="Foto siguiente"
+                  onClick={handleNextImage}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
                 >
-                  <ChevronRight className="w-5 h-5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </>
             )}
           </div>
+
+          {/* Miniaturas */}
+          {images.length > 1 && (
+            <div className="p-3 flex items-center justify-center gap-2 overflow-x-auto bg-black/5">
+              {images.map((imgUrl, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setActiveImageIndex(idx)}
+                  className="w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer"
+                  style={{
+                    borderColor: activeImageIndex === idx ? "#556B5D" : "transparent",
+                    opacity: activeImageIndex === idx ? 1 : 0.6,
+                  }}
+                >
+                  <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-
-        {/* LADO DERECHO: Detalle y Pedido */}
-        <div className="flex-1 flex flex-col md:overflow-y-auto min-w-0">
-          {/* Header del modal en desktop */}
-          <div
-            className="hidden md:flex items-start justify-between p-5 pb-4 border-b sticky top-0 z-10 bg-white"
-            style={{ borderColor: "#EDE7DA" }}
-          >
-            <div>
-              {product.categoryName && (
-                <span
-                  className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
-                  style={{ backgroundColor: "#EDE7DA", color: "#C49A5A" }}
-                >
-                  {product.categoryName}
-                </span>
-              )}
-              <h2
-                className="text-xl font-extrabold tracking-tight mt-1.5"
-                style={{ color: "#26302B" }}
-              >
-                {product.name}
-              </h2>
-            </div>
+        {/* ============================================================
+            PANEL DERECHO: DETALLES, SELECCIÓN Y COMPRA
+            ============================================================ */}
+        <div className="w-full md:w-1/2 flex flex-col overflow-y-auto max-h-[92vh] bg-white">
+          {/* Header */}
+          <div className="p-5 border-b flex items-center justify-between" style={{ borderColor: "#EDE7DA" }}>
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
+              Detalle de Producto
+            </span>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-xl transition-colors shrink-0 ml-2 mt-0.5"
-              style={{ color: "#8B7D6B", backgroundColor: "#F5EFE3" }}
+              className="p-1.5 rounded-full hover:bg-[#FAF7F2] text-[#8B7D6B] hover:text-[#26302B] transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
-          <div className="p-4 sm:p-5 space-y-4 sm:space-y-5 flex-1">
-            {/* Header en móvil */}
-            <div className="md:hidden">
+          <div className="p-5 space-y-4 flex-1">
+            {/* Categoría y Título */}
+            <div>
               {product.categoryName && (
                 <span
-                  className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider"
                   style={{ backgroundColor: "#EDE7DA", color: "#C49A5A" }}
                 >
                   {product.categoryName}
@@ -331,19 +366,19 @@ export function ProductDetailModal({
               </p>
             )}
 
-            {/* Selector de Color */}
+            {/* 1. Selector de Color */}
             {product.availableColors.length > 0 && (
               <div>
                 <p className="text-xs font-bold mb-2.5" style={{ color: "#26302B" }}>
-                  Color:{" "}
-                  <span className="font-normal" style={{ color: "#8B7D6B" }}>{currentColor}</span>
+                  1. Color:{" "}
+                  <span className="font-normal text-[#556B5D] font-bold">{currentColor}</span>
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {product.availableColors.map((color) => (
                     <button
                       key={color}
                       onClick={() => handleColorChange(color)}
-                      className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold border-2 transition-all"
+                      className="flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold border-2 transition-all cursor-pointer"
                       style={
                         currentColor === color
                           ? { borderColor: "#556B5D", backgroundColor: "#EEF3EE", color: "#26302B" }
@@ -363,16 +398,42 @@ export function ProductDetailModal({
               </div>
             )}
 
-            {/* Selector de Talla */}
+            {/* 2. Selector de Tipo de Manga (Corta / Larga) */}
+            {availableSleeves.length > 0 && (
+              <div>
+                <p className="text-xs font-bold mb-2.5" style={{ color: "#26302B" }}>
+                  2. Tipo de Manga:{" "}
+                  <span className="font-normal text-[#556B5D] font-bold">{currentSleeve}</span>
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {availableSleeves.map((slv) => (
+                    <button
+                      key={slv}
+                      onClick={() => handleSleeveChange(slv)}
+                      className="px-4 py-2 rounded-xl text-xs font-bold border-2 transition-all cursor-pointer"
+                      style={
+                        currentSleeve === slv
+                          ? { borderColor: "#26302B", backgroundColor: "#26302B", color: "white" }
+                          : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B" }
+                      }
+                    >
+                      {slv}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Selector de Talla */}
             <div>
               <div className="flex items-center justify-between mb-2.5">
                 <p className="text-xs font-bold" style={{ color: "#26302B" }}>
-                  Talla:{" "}
-                  <span className="font-normal" style={{ color: "#8B7D6B" }}>{currentSize}</span>
+                  3. Talla ({currentColor}{currentSleeve ? ` · ${currentSleeve}` : ""}):{" "}
+                  <span className="font-normal text-[#556B5D] font-bold">{currentSize}</span>
                 </p>
                 <button
                   onClick={() => setShowSizeGuide(!showSizeGuide)}
-                  className="text-[11px] font-bold underline underline-offset-2"
+                  className="text-[11px] font-bold underline underline-offset-2 cursor-pointer"
                   style={{ color: "#C49A5A" }}
                 >
                   Guía de Tallas
@@ -384,7 +445,7 @@ export function ProductDetailModal({
                   className="text-xs px-3 py-2 rounded-xl border"
                   style={{ color: "#B85450", backgroundColor: "#FEF5F5", borderColor: "#F5CACA" }}
                 >
-                  Sin tallas disponibles en este color.
+                  Sin tallas disponibles en esta combinación.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -392,10 +453,10 @@ export function ProductDetailModal({
                     <button
                       key={size}
                       onClick={() => setSelectedSize(size)}
-                      className="min-w-[48px] h-11 px-3 text-sm font-extrabold rounded-xl border-2 transition-all"
+                      className="min-w-[48px] h-11 px-3 text-sm font-extrabold rounded-xl border-2 transition-all cursor-pointer"
                       style={
                         currentSize === size
-                          ? { borderColor: "#26302B", backgroundColor: "#26302B", color: "white" }
+                          ? { borderColor: "#556B5D", backgroundColor: "#556B5D", color: "white" }
                           : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B" }
                       }
                     >
@@ -456,92 +517,65 @@ export function ProductDetailModal({
               <span className="text-xs font-bold" style={{ color: "#26302B" }}>Cantidad:</span>
               <div
                 className="flex items-center gap-1 p-1 rounded-xl"
-                style={{ backgroundColor: "#F5EFE3", border: "1px solid #E4DDD1" }}
+                style={{ backgroundColor: "#FAF7F2", border: "1px solid #E4DDD1" }}
               >
                 <button
+                  type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors font-bold"
-                  style={{ backgroundColor: "white", color: "#26302B" }}
+                  className="w-8 h-8 rounded-lg bg-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
+                  style={{ color: "#26302B" }}
                 >
                   <Minus className="w-3.5 h-3.5" />
                 </button>
-                <span
-                  className="w-8 text-center text-sm font-extrabold"
-                  style={{ color: "#26302B" }}
-                >
+                <span className="font-bold text-sm font-mono px-3 min-w-[32px] text-center" style={{ color: "#26302B" }}>
                   {quantity}
                 </span>
                 <button
-                  onClick={() => setQuantity((q) => q + 1)}
-                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors font-bold"
-                  style={{ backgroundColor: "#556B5D", color: "white" }}
+                  type="button"
+                  onClick={() => setQuantity((q) => Math.min(isOutOfStock ? 1 : 99, q + 1))}
+                  className="w-8 h-8 rounded-lg text-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
+                  style={{ backgroundColor: "#556B5D" }}
                 >
                   <Plus className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Dos Botones de Acción */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Botón 1: Agregar a la Lista / Carrito */}
+            {/* Botones de Acción */}
+            <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={handleAddToCartClick}
-                disabled={isOutOfStock || availableSizes.length === 0 || addedSuccess}
-                className="py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all disabled:opacity-50 border"
-                style={{
-                  backgroundColor: addedSuccess ? "#EBF5F0" : "#F5EFE3",
-                  color: addedSuccess ? "#3F7D58" : "#26302B",
-                  borderColor: addedSuccess ? "#A7D7B9" : "#E4DDD1",
-                }}
+                disabled={isOutOfStock || !matchingVariant}
+                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold text-white transition-all shadow-md active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ backgroundColor: addedSuccess ? "#3F7D58" : "#26302B" }}
               >
                 {addedSuccess ? (
                   <>
-                    <CheckCircle className="w-4 h-4 text-[#3F7D58]" />
+                    <CheckCircle className="w-4 h-4 text-white" />
                     ¡Agregado al Pedido!
                   </>
                 ) : (
                   <>
-                    <ShoppingBag className="w-4 h-4 text-[#C49A5A]" />
-                    Agregar a mi Lista
+                    <ShoppingBag className="w-4 h-4" />
+                    Agregar al Pedido
                   </>
                 )}
               </button>
 
-              {/* Botón 2: Comprar 1 Prenda por WhatsApp */}
               <button
                 onClick={handleSendWhatsApp}
-                disabled={isOutOfStock || availableSizes.length === 0}
-                className="py-3 px-4 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all disabled:opacity-50 text-white shadow-sm"
+                className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold text-white transition-all shadow-md active:scale-98 cursor-pointer"
                 style={{ backgroundColor: "#25D366" }}
               >
                 <MessageCircle className="w-4 h-4" />
-                Pedir 1 Prenda Directo
+                Pedir por WhatsApp
               </button>
-            </div>
-
-            {/* Íconos de confianza */}
-            <div
-              className="flex items-center justify-center gap-5 pt-1 text-[11px] font-semibold"
-              style={{ color: "#8B7D6B" }}
-            >
-              <span className="flex items-center gap-1">
-                <Scissors className="w-3.5 h-3.5 text-[#C49A5A]" />
-                Artesanal
-              </span>
-              <span className="flex items-center gap-1">
-                <Ruler className="w-3.5 h-3.5 text-[#C49A5A]" />
-                Talla exacta
-              </span>
-              <span className="flex items-center gap-1">
-                <Truck className="w-3.5 h-3.5 text-[#C49A5A]" />
-                Envío MX
-              </span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Visor de Zoom en Alta Definición para Bordados */}
+      {/* Modal de Zoom */}
       <ImageZoomModal
         isOpen={isZoomOpen}
         onClose={() => setIsZoomOpen(false)}
@@ -552,4 +586,3 @@ export function ProductDetailModal({
     </div>
   );
 }
-

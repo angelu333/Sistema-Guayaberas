@@ -32,6 +32,16 @@ export function EditProductModal({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Creación rápida de categoría
+  const [currentCategories, setCurrentCategories] = useState<Category[]>(categories);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategoryLoading, setCreatingCategoryLoading] = useState(false);
+
+  useEffect(() => {
+    setCurrentCategories(categories);
+  }, [categories]);
+
   useEffect(() => {
     if (isOpen && product) {
       setProductName(product.name || "");
@@ -56,6 +66,22 @@ export function EditProductModal({
   }, [isOpen, product]);
 
   if (!isOpen || !product) return null;
+
+  const handleQuickCreateCategory = async () => {
+    if (!newCategoryName.trim() || !session?.tenantId) return;
+    setCreatingCategoryLoading(true);
+    try {
+      const created = await productsService.createCategory(session.tenantId, newCategoryName);
+      setCurrentCategories((prev) => [...prev, created]);
+      setCategoryId(created.id);
+      setNewCategoryName("");
+      setIsCreatingCategory(false);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al crear la categoría.");
+    } finally {
+      setCreatingCategoryLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -139,19 +165,66 @@ export function EditProductModal({
             />
 
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-xs font-semibold text-[#26302B]">Categoría</label>
-              <select
-                className="w-full rounded-xl border border-[#DDD9D0] bg-white px-3 py-2 text-xs text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">-- Sin Categoría --</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-[#26302B]">Categoría</label>
+                {!isCreatingCategory && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingCategory(true)}
+                    className="text-xs font-bold text-[#556B5D] hover:underline cursor-pointer"
+                  >
+                    + Nueva Categoría
+                  </button>
+                )}
+              </div>
+
+              {isCreatingCategory ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Nombre categoría..."
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="flex-1 rounded-lg border border-[#556B5D] bg-white px-2.5 py-1.5 text-xs text-[#26302B] focus:outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleQuickCreateCategory();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-[#556B5D] hover:bg-[#44564A] text-white text-xs px-2.5 py-1.5 h-auto"
+                    disabled={creatingCategoryLoading || !newCategoryName.trim()}
+                    onClick={handleQuickCreateCategory}
+                  >
+                    {creatingCategoryLoading ? "..." : "Guardar"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsCreatingCategory(false); setNewCategoryName(""); }}
+                    className="text-xs text-[#6B7A71] hover:text-[#26302B] px-1.5 py-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="w-full rounded-xl border border-[#DDD9D0] bg-white px-3 py-2 text-xs text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="">-- Sin Categoría --</option>
+                  {currentCategories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 

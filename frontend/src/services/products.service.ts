@@ -337,6 +337,34 @@ export const productsService = {
   },
 
   /**
+   * Crea una nueva categoría para la empresa
+   */
+  async createCategory(tenantId: string, name: string): Promise<Category> {
+    const supabase = createClient();
+    const cleanName = name.trim();
+    if (!cleanName) throw new Error("El nombre de la categoría es requerido.");
+
+    const { data, error } = await supabase
+      .from("categorias")
+      .insert({
+        tenant_id: tenantId,
+        name: cleanName,
+        is_active: true,
+      })
+      .select("*")
+      .single();
+
+    if (error) throw new Error(`Error al crear categoría: ${error.message}`);
+
+    return {
+      id: data.id,
+      tenantId: data.tenant_id,
+      name: data.name,
+      isActive: data.is_active,
+    };
+  },
+
+  /**
    * Obtiene los colores del tenant
    */
   async getColors(): Promise<Color[]> {
@@ -399,9 +427,9 @@ export const productsService = {
   },
 
   /**
-   * Genera un SKU unico recomendado segun modelo, color y talla
+   * Genera un SKU unico recomendado segun modelo, color, talla y tipo de manga
    */
-  generateSKU(productName: string, colorName?: string, sizeName?: string): string {
+  generateSKU(productName: string, colorName?: string, sizeName?: string, sleeveName?: string): string {
     const pCode = productName
       .slice(0, 4)
       .toUpperCase()
@@ -411,8 +439,15 @@ export const productsService = {
       ? colorName.slice(0, 3).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
       : "GEN";
     const sCode = sizeName ? sizeName.toUpperCase() : "UNI";
+    const slCode = sleeveName
+      ? sleeveName.toLowerCase().includes("larga")
+        ? "-ML"
+        : sleeveName.toLowerCase().includes("corta")
+        ? "-MC"
+        : ""
+      : "";
 
-    return `${pCode}-${cCode}-${sCode}`;
+    return `${pCode}-${cCode}-${sCode}${slCode}`;
   },
 
   /**

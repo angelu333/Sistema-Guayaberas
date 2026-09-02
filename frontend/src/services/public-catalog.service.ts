@@ -18,12 +18,14 @@ export interface PublicFilterOptions {
   modelos: { id: string; name: string }[];
   colores: { id: string; name: string; hexCode: string | null }[];
   tallas: { id: string; name: string; sortOrder: number }[];
+  mangas: { id: string; name: string }[];
 }
 
 export interface PublicCatalogFilters {
   modelo?: string;
   talla?: string;
   color?: string;
+  manga?: string;
 }
 
 export interface PublicProductView {
@@ -37,6 +39,7 @@ export interface PublicProductView {
   maxPrice: number;
   availableColors: string[];
   availableSizes: string[];
+  availableSleeves: string[];
   totalStock: number;
   variants: {
     variantId: string;
@@ -106,12 +109,10 @@ export const publicCatalogService = {
   },
 
   /**
-   * Obtiene TODAS las opciones de Modelo, Talla y Color que existen en la BD
-   * (incluyendo las globales y las asociadas a variantes del tenant)
+   * Obtiene TODAS las opciones de Modelo, Talla, Color y Tipo de Manga que existen en la BD
    */
   async getPublicFilterOptions(tenantId: string): Promise<PublicFilterOptions> {
-    // Cargar productos del tenant, todas las tallas (globales y de tenant) y todos los colores
-    const [prodsRes, colorsRes, sizesRes, variantsRes] = await Promise.all([
+    const [prodsRes, colorsRes, sizesRes, sleevesRes, variantsRes] = await Promise.all([
       supabase
         .from("productos")
         .select("id, name")
@@ -131,11 +132,18 @@ export const publicCatalogService = {
         .eq("is_active", true)
         .order("sort_order"),
       supabase
+        .from("tipos_manga")
+        .select("id, name")
+        .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
+        .eq("is_active", true)
+        .order("name"),
+      supabase
         .from("variantes_producto")
         .select(`
           productos(id, name),
           colores(id, name, hex_code),
-          tallas(id, name, sort_order)
+          tallas(id, name, sort_order),
+          tipos_manga(id, name)
         `)
         .eq("tenant_id", tenantId)
         .eq("is_active", true),
@@ -150,6 +158,9 @@ export const publicCatalogService = {
     const tallasMap = new Map<string, { id: string; name: string; sortOrder: number }>();
     (sizesRes.data || []).forEach((s: any) => tallasMap.set(s.id, { id: s.id, name: s.name, sortOrder: s.sort_order || 0 }));
 
+    const mangasMap = new Map<string, { id: string; name: string }>();
+    (sleevesRes.data || []).forEach((sl: any) => mangasMap.set(sl.id, { id: sl.id, name: sl.name }));
+
     // Consolidar también todo lo que venga en las variantes del tenant
     (variantsRes.data || []).forEach((v: any) => {
       if (v.productos?.id && v.productos?.name) {
@@ -161,17 +172,21 @@ export const publicCatalogService = {
       if (v.tallas?.id && v.tallas?.name) {
         tallasMap.set(v.tallas.id, { id: v.tallas.id, name: v.tallas.name, sortOrder: v.tallas.sort_order || 0 });
       }
+      if (v.tipos_manga?.id && v.tipos_manga?.name) {
+        mangasMap.set(v.tipos_manga.id, { id: v.tipos_manga.id, name: v.tipos_manga.name });
+      }
     });
 
     const modelos = Array.from(modelosMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     const colores = Array.from(coloresMap.values()).sort((a, b) => a.name.localeCompare(b.name));
     const tallas = Array.from(tallasMap.values()).sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+    const mangas = Array.from(mangasMap.values()).sort((a, b) => a.name.localeCompare(b.name));
 
-    return { modelos, colores, tallas };
+    return { modelos, colores, tallas, mangas };
   },
 
   /**
-   * Obtiene el catálogo de variantes públicas filtrando por Modelo, Talla y Color
+   * Obtiene el catálogo de variantes públicas filtrando por Modelo, Talla, Color y Tipo de Manga
    */
   async getPublicCatalog(
     tenantId: string,
@@ -255,7 +270,7 @@ export const publicCatalogService = {
       };
     });
 
-    // Aplicar los 3 filtros principales: Modelo, Talla y Color
+    // Aplicar filtros: Modelo, Talla, Color, Manga
     if (filters?.modelo) {
       const m = filters.modelo.toLowerCase();
       mapped = mapped.filter(
@@ -280,6 +295,15 @@ export const publicCatalogService = {
         (item) =>
           item.colorId?.toLowerCase() === c ||
           (item.color?.name || "").toLowerCase().includes(c)
+      );
+    }
+
+    if (filters?.manga) {
+      const sl = filters.manga.toLowerCase();
+      mapped = mapped.filter(
+        (item) =>
+          item.sleeveTypeId?.toLowerCase() === sl ||
+          (item.sleeveType?.name || "").toLowerCase().includes(sl)
       );
     }
 
@@ -308,6 +332,7 @@ export const publicCatalogService = {
           maxPrice: v.salePrice,
           availableColors: [],
           availableSizes: [],
+          availableSleeves: [],
           totalStock: 0,
           variants: [],
         });
@@ -324,6 +349,10 @@ export const publicCatalogService = {
 
       if (v.size?.name && !entry.availableSizes.includes(v.size.name)) {
         entry.availableSizes.push(v.size.name);
+      }
+
+      if (v.sleeveType?.name && !entry.availableSleeves.includes(v.sleeveType.name)) {
+        entry.availableSleeves.push(v.sleeveType.name);
       }
 
       entry.variants.push({

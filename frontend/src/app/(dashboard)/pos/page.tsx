@@ -20,6 +20,7 @@ import {
   Layers,
   Download,
   Loader2,
+  ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -67,6 +68,9 @@ export default function POSPage() {
 
   // Modal de Selección Rápida de Variantes (Color, Talla, Cantidad)
   const [selectedProductForModal, setSelectedProductForModal] = useState<GroupedPOSProduct | null>(null);
+  
+  // Estado para abrir/cerrar carrito en celulares
+  const [isMobileCartOpen, setIsMobileCartOpen] = useState(false);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -282,6 +286,7 @@ export default function POSPage() {
           productName: i.variant.product?.name || "Guayabera",
           colorName: i.variant.color?.name || null,
           sizeName: i.variant.size?.name || null,
+          sleeveName: i.variant.sleeveType?.name || null,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
           subtotal: i.unitPrice * i.quantity,
@@ -325,23 +330,37 @@ export default function POSPage() {
           PANEL IZQUIERDO: CATÁLOGO AGRUPADO POR MODELO DE GUAYABERA
           ============================================================ */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-[#DDD9D0] bg-white">
-        {/* Barra de búsqueda */}
-        <div className="p-4 border-b border-[#DDD9D0] bg-white">
-          <div className="relative">
+        {/* Barra de búsqueda con botón de carrito en móvil */}
+        <div className="p-3 sm:p-4 border-b border-[#DDD9D0] bg-white flex items-center gap-2">
+          <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
             <input
               ref={searchRef}
               type="text"
-              placeholder="Buscar modelo o escanear código SKU..."
+              placeholder="Buscar modelo o escanear SKU..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-4 py-2.5 text-xs bg-[#F8F6F1] border border-[#DDD9D0] rounded-xl focus:outline-none focus:border-[#556B5D] focus:bg-white transition-colors"
             />
           </div>
+
+          {/* Botón rápido de carrito en el header (solo móvil) */}
+          <button
+            onClick={() => setIsMobileCartOpen(true)}
+            className="lg:hidden p-2.5 rounded-xl bg-[#F8F6F1] border border-[#DDD9D0] text-[#26302B] relative flex items-center justify-center shrink-0 hover:border-[#556B5D]"
+            title="Ver carrito"
+          >
+            <ShoppingCart className="w-5 h-5 text-[#556B5D]" />
+            {cart.items.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-[#C49A5A] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                {cart.itemCount()}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Cuadrícula de Modelos de Guayabera (1 tarjeta por modelo) */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4 pb-28 lg:pb-4">
           {loadingVariants ? (
             <div className="flex items-center justify-center h-40 text-xs text-[#6B7A71]">
               Cargando modelos...
@@ -439,17 +458,31 @@ export default function POSPage() {
       </div>
 
       {/* ============================================================
-          PANEL DERECHO: CARRITO Y COBRO
+          PANEL DERECHO: CARRITO Y COBRO (Desktop fijo / Mobile Drawer)
           ============================================================ */}
-      <div className="w-full lg:w-96 flex flex-col bg-[#F8F6F1] shrink-0">
+      <div
+        className={`
+          fixed inset-0 z-50 flex flex-col bg-white lg:static lg:z-auto lg:w-96 lg:flex lg:bg-[#F8F6F1] lg:shrink-0 transition-all duration-300
+          ${isMobileCartOpen ? "flex" : "hidden lg:flex"}
+        `}
+      >
         {/* Header Carrito */}
         <div className="p-4 border-b border-[#DDD9D0] bg-white flex items-center justify-between">
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsMobileCartOpen(false)}
+              className="lg:hidden p-1.5 -ml-1 text-[#6B7A71] hover:text-[#26302B] rounded-xl hover:bg-[#F8F6F1] transition-colors"
+              title="Volver a los modelos"
+            >
+              <X className="w-5 h-5" />
+            </button>
             <ShoppingCart className="w-5 h-5 text-[#556B5D]" />
-            <span className="font-bold text-sm text-[#26302B] font-[Outfit]">Venta en Mostrador</span>
+            <span className="font-bold text-sm text-[#26302B] font-[Outfit]">
+              {checkoutStep === "payment" ? "Procesar Pago" : "Venta en Mostrador"}
+            </span>
           </div>
 
-          {cart.items.length > 0 && (
+          {cart.items.length > 0 && checkoutStep === "cart" && (
             <button
               onClick={() => cart.clearCart()}
               className="text-xs text-[#B85450] hover:underline flex items-center gap-1 font-semibold"
@@ -521,9 +554,13 @@ export default function POSPage() {
                             {item.variant.product?.name}
                           </p>
                           <p className="text-[10px] text-[#6B7A71]">
-                            {[item.variant.color?.name, item.variant.size?.name ? `Talla ${item.variant.size.name}` : null]
+                            {[
+                              item.variant.color?.name,
+                              item.variant.size?.name ? `Talla ${item.variant.size.name}` : null,
+                              item.variant.sleeveType?.name,
+                            ]
                               .filter(Boolean)
-                              .join(" / ")}
+                              .join(" · ")}
                           </p>
                         </div>
                         <button
@@ -767,6 +804,32 @@ export default function POSPage() {
           </div>
         )}
       </div>
+
+      {/* Barra Flotante Inferior de Carrito en Móvil */}
+      {cart.items.length > 0 && !isMobileCartOpen && (
+        <div className="lg:hidden fixed bottom-3 left-3 right-3 p-3 bg-[#26302B] text-white rounded-2xl shadow-2xl z-40 flex items-center justify-between gap-3 animate-fade-in border border-[#38463F]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-10 h-10 rounded-xl bg-[#556B5D] text-white flex items-center justify-center relative shadow-xs">
+              <ShoppingCart className="w-5 h-5" />
+              <span className="absolute -top-1 -right-1 bg-[#C49A5A] text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#26302B]">
+                {cart.itemCount()}
+              </span>
+            </div>
+            <div>
+              <p className="text-[11px] text-[#A6B5AC] font-medium">{cart.itemCount()} prenda{cart.itemCount() > 1 ? "s" : ""}</p>
+              <p className="text-sm font-extrabold font-mono text-white">${total.toFixed(2)} MXN</p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setIsMobileCartOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-[#3F7D58] hover:bg-[#326446] text-white text-xs font-bold shadow-md flex items-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+          >
+            <span>Ver Carrito / Cobrar</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Modal de Selección Rápida de Variantes */}
       <POSVariantSelectModal

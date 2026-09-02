@@ -46,6 +46,11 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Creación rápida de categoría
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategoryLoading, setCreatingCategoryLoading] = useState(false);
+
   useEffect(() => {
     if (isOpen) {
       loadCatalogData();
@@ -71,6 +76,24 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
     }
   };
 
+  const handleQuickCreateCategory = async () => {
+    if (!newCategoryName.trim()) return;
+    if (!session?.tenantId) return;
+
+    setCreatingCategoryLoading(true);
+    try {
+      const created = await productsService.createCategory(session.tenantId, newCategoryName);
+      setCategories((prev) => [...prev, created]);
+      setCategoryId(created.id);
+      setNewCategoryName("");
+      setIsCreatingCategory(false);
+    } catch (err: any) {
+      setErrorMsg(err.message || "Error al crear la categoría.");
+    } finally {
+      setCreatingCategoryLoading(false);
+    }
+  };
+
   const handleAddVariantRow = () => {
     const defaultColor = colors[0]?.id || "";
     const defaultSize = sizes[0]?.id || "";
@@ -78,7 +101,8 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
 
     const colorName = colors.find((c) => c.id === defaultColor)?.name;
     const sizeName = sizes.find((s) => s.id === defaultSize)?.name;
-    const autoSku = productsService.generateSKU(productName || "GUAY", colorName, sizeName);
+    const sleeveName = sleeveTypes.find((s) => s.id === defaultSleeve)?.name;
+    const autoSku = productsService.generateSKU(productName || "GUAY", colorName, sizeName, sleeveName);
 
     setVariants((prev) => [
       ...prev,
@@ -108,11 +132,12 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
       const updated = [...prev];
       const current = { ...updated[index], [field]: value };
 
-      // Si cambia color o talla, autogenerar SKU sugerido
-      if (field === "colorId" || field === "sizeId") {
+      // Si cambia color, talla o manga, autogenerar SKU sugerido
+      if (field === "colorId" || field === "sizeId" || field === "sleeveTypeId") {
         const colorObj = colors.find((c) => c.id === (field === "colorId" ? value : current.colorId));
         const sizeObj = sizes.find((s) => s.id === (field === "sizeId" ? value : current.sizeId));
-        current.sku = productsService.generateSKU(productName || "GUAY", colorObj?.name, sizeObj?.name);
+        const sleeveObj = sleeveTypes.find((s) => s.id === (field === "sleeveTypeId" ? value : current.sleeveTypeId));
+        current.sku = productsService.generateSKU(productName || "GUAY", colorObj?.name, sizeObj?.name, sleeveObj?.name);
       }
 
       updated[index] = current;
@@ -199,19 +224,66 @@ export function ProductModal({ isOpen, onClose, onSuccess }: ProductModalProps) 
             />
 
             <div className="flex flex-col gap-1.5 w-full">
-              <label className="text-sm font-medium text-[#26302B]">Categoría</label>
-              <select
-                className="w-full rounded-lg border border-[#DDD9D0] bg-white px-3 py-2 text-sm text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-              >
-                <option value="">-- Sin Categoría --</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-[#26302B]">Categoría</label>
+                {!isCreatingCategory && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreatingCategory(true)}
+                    className="text-xs font-bold text-[#556B5D] hover:underline cursor-pointer"
+                  >
+                    + Nueva Categoría
+                  </button>
+                )}
+              </div>
+
+              {isCreatingCategory ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Nombre (ej: Niños, Vestidos)..."
+                    value={newCategoryName}
+                    onChange={(e) => setNewCategoryName(e.target.value)}
+                    className="flex-1 rounded-lg border border-[#556B5D] bg-white px-2.5 py-1.5 text-xs text-[#26302B] focus:outline-none"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleQuickCreateCategory();
+                      }
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-[#556B5D] hover:bg-[#44564A] text-white text-xs px-2.5 py-1.5 h-auto"
+                    disabled={creatingCategoryLoading || !newCategoryName.trim()}
+                    onClick={handleQuickCreateCategory}
+                  >
+                    {creatingCategoryLoading ? "..." : "Guardar"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => { setIsCreatingCategory(false); setNewCategoryName(""); }}
+                    className="text-xs text-[#6B7A71] hover:text-[#26302B] px-1.5 py-1"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <select
+                  className="w-full rounded-lg border border-[#DDD9D0] bg-white px-3 py-2 text-sm text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="">-- Sin Categoría --</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
 
