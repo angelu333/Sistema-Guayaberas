@@ -453,9 +453,10 @@ function PublicCatalogContent({ slug }: { slug: string }) {
             {displayedProducts.map((p) => {
               const isOutOfStock = p.totalStock <= 0;
               const isLowStock = p.totalStock > 0 && p.totalStock <= 3;
+              const isCorta = (p.sleeveTypeName || "").toLowerCase().includes("corta");
               return (
                 <div
-                  key={p.productId}
+                  key={p.cardKey ?? p.productId}
                   onClick={() => setSelectedProductForModal(p)}
                   className="group cursor-pointer rounded-2xl overflow-hidden flex flex-col bg-white border border-[#E4DDD1] hover:border-[#556B5D] hover:shadow-lg transition-all"
                 >
@@ -483,11 +484,17 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                       </span>
                     </div>
 
-                    {/* Badge categoría arriba-izquierda */}
-                    {p.categoryName && (
+                    {/* Badge tipo de manga (Manga Corta / Manga Larga) — arriba izquierda */}
+                    {p.sleeveTypeName && (
                       <div className="absolute top-2 left-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#C49A5A] text-white shadow-xs">
-                          {p.categoryName}
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs ${
+                            isCorta
+                              ? "bg-[#3F7D58] text-white"
+                              : "bg-[#26302B] text-white"
+                          }`}
+                        >
+                          {p.sleeveTypeName}
                         </span>
                       </div>
                     )}

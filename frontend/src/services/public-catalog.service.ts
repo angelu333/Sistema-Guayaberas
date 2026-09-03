@@ -30,6 +30,8 @@ export interface PublicCatalogFilters {
 
 export interface PublicProductView {
   productId: string;
+  /** Clave única: productId + sleeveTypeId para separar tarjetas por manga */
+  cardKey: string;
   name: string;
   description: string | null;
   categoryName: string | null;
@@ -40,6 +42,9 @@ export interface PublicProductView {
   availableColors: string[];
   availableSizes: string[];
   availableSleeves: string[];
+  /** Tipo de manga de esta tarjeta (Manga Corta o Manga Larga) */
+  sleeveTypeId: string | null;
+  sleeveTypeName: string | null;
   totalStock: number;
   variants: {
     variantId: string;
@@ -318,18 +323,23 @@ export const publicCatalogService = {
   },
 
   /**
-   * Agrupa las variantes por modelo base de guayabera para la vista de tarjetas del catálogo
+   * Agrupa las variantes por (productId + sleeveTypeId) para la vista de tarjetas del catálogo.
+   * Esto genera una tarjeta independiente por cada tipo de manga de cada modelo.
+   * Ejemplo: "Modelo Valladolid" con Manga Corta y Manga Larga → 2 tarjetas separadas.
    */
   groupProductsForCatalog(variants: ProductVariant[]): PublicProductView[] {
+    // Clave: productId + "|" + sleeveTypeId (o "none" si no tiene)
     const map = new Map<string, PublicProductView>();
 
     variants.forEach((v) => {
       if (!v.product) return;
-      const pId = v.productId;
+      const sleeveKey = v.sleeveTypeId || "none";
+      const cardKey = `${v.productId}|${sleeveKey}`;
 
-      if (!map.has(pId)) {
-        map.set(pId, {
-          productId: pId,
+      if (!map.has(cardKey)) {
+        map.set(cardKey, {
+          productId: v.productId,
+          cardKey,
           name: v.product.name,
           description: v.product.description,
           categoryName: v.product.category?.name || "Guayaberas",
@@ -340,12 +350,14 @@ export const publicCatalogService = {
           availableColors: [],
           availableSizes: [],
           availableSleeves: [],
+          sleeveTypeId: v.sleeveTypeId || null,
+          sleeveTypeName: v.sleeveType?.name || null,
           totalStock: 0,
           variants: [],
         });
       }
 
-      const entry = map.get(pId)!;
+      const entry = map.get(cardKey)!;
       entry.minPrice = Math.min(entry.minPrice, v.salePrice);
       entry.maxPrice = Math.max(entry.maxPrice, v.salePrice);
       entry.totalStock += v.totalStock || 0;
@@ -373,6 +385,16 @@ export const publicCatalogService = {
       });
     });
 
-    return Array.from(map.values());
+    // Ordenar: primero por nombre de producto, luego Manga Corta antes que Manga Larga
+    return Array.from(map.values()).sort((a, b) => {
+      const nameCompare = a.name.localeCompare(b.name);
+      if (nameCompare !== 0) return nameCompare;
+      // Manga Corta (CT) antes que Manga Larga (LG)
+      const aIsCorta = (a.sleeveTypeName || "").toLowerCase().includes("corta");
+      const bIsCorta = (b.sleeveTypeName || "").toLowerCase().includes("corta");
+      if (aIsCorta && !bIsCorta) return -1;
+      if (!aIsCorta && bIsCorta) return 1;
+      return 0;
+    });
   },
 };

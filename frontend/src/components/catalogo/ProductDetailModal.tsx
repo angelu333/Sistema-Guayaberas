@@ -54,21 +54,33 @@ export function ProductDetailModal({
       const firstColor = product.availableColors[0] || "";
       setSelectedColor(firstColor);
 
-      // Mangas disponibles para el primer color
-      const sleeves = product.variants
-        .filter((v) => !firstColor || v.colorName === firstColor)
-        .map((v) => v.sleeveTypeName)
-        .filter(Boolean) as string[];
-      const uniqueSleeves = Array.from(new Set(sleeves));
-      const firstSleeve = uniqueSleeves[0] || "";
-      setSelectedSleeve(firstSleeve);
+      // Si la tarjeta tiene un tipo de manga fijo (viene de la nueva agrupación por manga),
+      // usarlo directamente; si no, detectar la primera manga disponible.
+      const fixedSleeve = product.sleeveTypeName || "";
+      if (fixedSleeve) {
+        setSelectedSleeve(fixedSleeve);
+      } else {
+        const sleeves = product.variants
+          .filter((v) => !firstColor || v.colorName === firstColor)
+          .map((v) => v.sleeveTypeName)
+          .filter(Boolean) as string[];
+        const uniqueSleeves = Array.from(new Set(sleeves));
+        setSelectedSleeve(uniqueSleeves[0] || "");
+      }
+      const activeSleeve = fixedSleeve || (() => {
+        const s = product.variants
+          .filter((v) => !firstColor || v.colorName === firstColor)
+          .map((v) => v.sleeveTypeName)
+          .filter(Boolean) as string[];
+        return Array.from(new Set(s))[0] || "";
+      })();
 
-      // Tallas disponibles para primer color y primer tipo de manga
+      // Tallas disponibles para primer color y tipo de manga activo
       const sizes = product.variants
         .filter(
           (v) =>
             (!firstColor || v.colorName === firstColor) &&
-            (!firstSleeve || v.sleeveTypeName === firstSleeve)
+            (!activeSleeve || v.sleeveTypeName === activeSleeve)
         )
         .map((v) => v.sizeName)
         .filter(Boolean) as string[];
