@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, useMemo, Suspense, Fragment } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
   Package,
@@ -22,10 +22,15 @@ import {
   PackagePlus,
   Store,
   Pencil,
+  ChevronDown,
+  ChevronRight,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { Pagination } from "@/components/ui/Pagination";
 import { useTenantStore } from "@/stores/tenant.store";
 import { useAuthStore } from "@/stores/auth.store";
 import {
@@ -34,9 +39,9 @@ import {
   type InventoryMovementRecord,
 } from "@/services/inventory.service";
 import { productsService } from "@/services/products.service";
-import type { StockAlert, ProductVariant, Category, Product, Location } from "@/types/domain.types";
+import type { StockAlert, ProductVariant, Category, Product, Location, Color, Size, SleeveType } from "@/types/domain.types";
 import { InventoryAdjustmentModal } from "@/components/inventario/InventoryAdjustmentModal";
-import { ProductModal } from "@/components/productos/ProductModal";
+import { QuickProductModal } from "@/components/productos/QuickProductModal";
 import { EditProductModal } from "@/components/productos/EditProductModal";
 import { formatCurrency } from "@/lib/utils/formatters";
 
@@ -77,6 +82,12 @@ function InventarioYProductosContent() {
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [selectedVariantId, setSelectedVariantId] = useState<string | undefined>(undefined);
 
+  // Modo de visualización de Existencias: "matrix" (Matriz por modelo/tallas) o "detailed" (lista por SKU)
+  const [stockViewMode, setStockViewMode] = useState<"matrix" | "detailed">("matrix");
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const toggleExpandGroup = (key: string) =>
+    setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+
   // Estados Catálogo de Productos (solo admin)
   const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -85,6 +96,37 @@ function InventarioYProductosContent() {
   const [selectedCategory, setSelectedCategory] = useState("");
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProductForEdit, setSelectedProductForEdit] = useState<Product | null>(null);
+
+  // Estado para expandir modelos en Catálogo
+  const [expandedModels, setExpandedModels] = useState<Record<string, boolean>>({});
+  const toggleExpandModel = (productId: string) =>
+    setExpandedModels((prev) => ({ ...prev, [productId]: !prev[productId] }));
+
+  // Estados de paginación
+  const [matrixPage, setMatrixPage] = useState(1);
+  const [matrixPageSize, setMatrixPageSize] = useState(15);
+
+  const [detailedPage, setDetailedPage] = useState(1);
+  const [detailedPageSize, setDetailedPageSize] = useState(25);
+
+  const [modelsPage, setModelsPage] = useState(1);
+  const [modelsPageSize, setModelsPageSize] = useState(10);
+
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyPageSize, setHistoryPageSize] = useState(20);
+
+  const [alertsPage, setAlertsPage] = useState(1);
+  const [alertsPageSize, setAlertsPageSize] = useState(20);
+
+  // Resetear páginas cuando cambien búsquedas o filtros
+  useEffect(() => {
+    setMatrixPage(1);
+    setDetailedPage(1);
+  }, [searchQuery, selectedLocationId]);
+
+  useEffect(() => {
+    setModelsPage(1);
+  }, [productSearch, selectedCategory]);
 
   const loadInventoryData = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -95,7 +137,7 @@ function InventarioYProductosContent() {
 
       const [itemsData, movementsData, alertsData, locsData] = await Promise.all([
         inventoryService.getStockByLocation(effectiveTenantId, activeLocId),
-        inventoryService.getMovementHistory(effectiveTenantId, 50),
+        inventoryService.getMovementHistory(effectiveTenantId, 100),
         inventoryService.getStockAlerts(effectiveTenantId, activeLocId),
         isAdmin && locations.length === 0 ? inventoryService.getLocations(effectiveTenantId) : Promise.resolve(locations),
       ]);
@@ -120,9 +162,6 @@ function InventarioYProductosContent() {
       const [prods, cats] = await Promise.all([
         productsService.getProducts({
           tenantId: effectiveTenantId,
-          search: productSearch || undefined,
-          categoryId: selectedCategory || undefined,
-          isActive: true,
         }),
         productsService.getCategories(effectiveTenantId),
       ]);
@@ -133,8 +172,7 @@ function InventarioYProductosContent() {
     } finally {
       setLoadingProducts(false);
     }
-  }, [effectiveTenantId, productSearch, selectedCategory]);
-
+  }, [effectiveTenantId]);
   useEffect(() => {
     loadInventoryData();
     loadProductsData();
@@ -193,16 +231,226 @@ function InventarioYProductosContent() {
     );
   });
 
-  const filteredVariants = variants.filter((v) => {
-    if (!productSearch) return true;
-    const q = productSearch.toLowerCase();
-    return (
-      v.sku.toLowerCase().includes(q) ||
-      (v.product?.name || "").toLowerCase().includes(q) ||
-      (v.color?.name || "").toLowerCase().includes(q) ||
-      (v.size?.name || "").toLowerCase().includes(q)
-    );
-  });
+  // Agrupamiento por Modelo + Color + Manga (+ Ubicación) para la Vista Matriz de Tallas
+  interface GroupedStockRow {
+    groupKey: string;
+    productName: string;
+    colorName: string | null;
+    sleeveTypeName: string | null;
+    locationName: string;
+    categoryName: string;
+    salePrice: number;
+    totalQuantity: number;
+    minStock: number;
+    sizes: {
+      sizeName: string;
+      quantity: number;
+      variantId: string;
+      sku: string;
+      minStock: number;
+    }[];
+  }
+
+  const groupedStock: GroupedStockRow[] = useMemo(() => {
+    const map = new Map<string, GroupedStockRow>();
+
+    filteredStock.forEach((item) => {
+      const key = `${item.productName}__${item.colorName || ""}__${item.sleeveTypeName || ""}__${item.locationName}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          groupKey: key,
+          productName: item.productName,
+          colorName: item.colorName,
+          sleeveTypeName: item.sleeveTypeName,
+          locationName: item.locationName,
+          categoryName: item.categoryName,
+          salePrice: item.salePrice,
+          totalQuantity: 0,
+          minStock: item.minStock,
+          sizes: [],
+        });
+      }
+
+      const grp = map.get(key)!;
+      grp.totalQuantity += item.quantity;
+      if (item.sizeName) {
+        grp.sizes.push({
+          sizeName: item.sizeName,
+          quantity: item.quantity,
+          variantId: item.variantId,
+          sku: item.sku,
+          minStock: item.minStock,
+        });
+      }
+    });
+
+    const result = Array.from(map.values()).map((grp) => {
+      grp.sizes.sort((a, b) => {
+        const numA = parseFloat(a.sizeName);
+        const numB = parseFloat(b.sizeName);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        if (!isNaN(numA)) return -1;
+        if (!isNaN(numB)) return 1;
+        return a.sizeName.localeCompare(b.sizeName, undefined, { numeric: true });
+      });
+      return grp;
+    });
+
+    return result;
+  }, [filteredStock]);
+
+  // Agrupación de variantes por Modelo (Producto) para la pestaña de Catálogo
+  interface GroupedProductModel {
+    productId: string;
+    product: Product;
+    name: string;
+    description: string | null;
+    categoryName: string;
+    imageUrl: string | null;
+    colors: Color[];
+    sleeveTypes: SleeveType[];
+    sizes: Size[];
+    minPrice: number;
+    maxPrice: number;
+    totalVariants: number;
+    activeVariantsCount: number;
+    variants: ProductVariant[];
+  }
+
+  const groupedModels: GroupedProductModel[] = useMemo(() => {
+    const map = new Map<string, GroupedProductModel>();
+
+    variants.forEach((v) => {
+      if (!v.product) return;
+      const pId = v.product.id;
+
+      if (!map.has(pId)) {
+        map.set(pId, {
+          productId: pId,
+          product: v.product,
+          name: v.product.name,
+          description: v.product.description || null,
+          categoryName:
+            (v.product as any).category?.name ||
+            categories.find((c) => c.id === v.product?.categoryId)?.name ||
+            "Sin Categoría",
+          imageUrl: v.product.imageUrl || v.images?.[0]?.url || null,
+          colors: [],
+          sleeveTypes: [],
+          sizes: [],
+          minPrice: v.salePrice,
+          maxPrice: v.salePrice,
+          totalVariants: 0,
+          activeVariantsCount: 0,
+          variants: [],
+        });
+      }
+
+      const model = map.get(pId)!;
+      model.totalVariants += 1;
+      if (v.isActive) model.activeVariantsCount += 1;
+      model.variants.push(v);
+
+      if (v.salePrice < model.minPrice) model.minPrice = v.salePrice;
+      if (v.salePrice > model.maxPrice) model.maxPrice = v.salePrice;
+
+      if (v.color && !model.colors.some((c) => c.id === v.color!.id)) {
+        model.colors.push(v.color);
+      }
+      if (v.sleeveType && !model.sleeveTypes.some((s) => s.id === v.sleeveType!.id)) {
+        model.sleeveTypes.push(v.sleeveType);
+      }
+      if (v.size && !model.sizes.some((s) => s.id === v.size!.id)) {
+        model.sizes.push(v.size);
+      }
+    });
+
+    // Ordenar tallas por número
+    map.forEach((model) => {
+      model.sizes.sort((a, b) => {
+        const numA = parseFloat(a.name);
+        const numB = parseFloat(b.name);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        if (!isNaN(numA)) return -1;
+        if (!isNaN(numB)) return 1;
+        return a.name.localeCompare(b.name, undefined, { numeric: true });
+      });
+
+      // Ordenar variantes por manga, color y talla
+      model.variants.sort((a, b) => {
+        const sleeveA = a.sleeveType?.name || "";
+        const sleeveB = b.sleeveType?.name || "";
+        if (sleeveA !== sleeveB) return sleeveA.localeCompare(sleeveB);
+        const colorA = a.color?.name || "";
+        const colorB = b.color?.name || "";
+        if (colorA !== colorB) return colorA.localeCompare(colorB);
+        const numA = parseFloat(a.size?.name || "0");
+        const numB = parseFloat(b.size?.name || "0");
+        return numA - numB;
+      });
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [variants, categories]);
+
+  const filteredModels = useMemo(() => {
+    let list = groupedModels;
+
+    if (selectedCategory) {
+      list = list.filter((m) => m.product.categoryId === selectedCategory);
+    }
+
+    if (productSearch.trim()) {
+      const q = productSearch.toLowerCase().trim();
+      list = list.filter(
+        (m) =>
+          m.name.toLowerCase().includes(q) ||
+          m.categoryName.toLowerCase().includes(q) ||
+          m.colors.some((c) => c.name.toLowerCase().includes(q)) ||
+          m.sleeveTypes.some((s) => s.name.toLowerCase().includes(q)) ||
+          m.variants.some((v) => v.sku.toLowerCase().includes(q))
+      );
+    }
+
+    return list;
+  }, [groupedModels, selectedCategory, productSearch]);
+
+  // Slices de paginación
+  // 1. Matriz de Tallas
+  const paginatedGroupedStock = useMemo(() => {
+    const start = (matrixPage - 1) * matrixPageSize;
+    return groupedStock.slice(start, start + matrixPageSize);
+  }, [groupedStock, matrixPage, matrixPageSize]);
+  const totalMatrixPages = Math.ceil(groupedStock.length / matrixPageSize) || 1;
+
+  // 2. Existencias por SKU
+  const paginatedDetailedStock = useMemo(() => {
+    const start = (detailedPage - 1) * detailedPageSize;
+    return filteredStock.slice(start, start + detailedPageSize);
+  }, [filteredStock, detailedPage, detailedPageSize]);
+  const totalDetailedPages = Math.ceil(filteredStock.length / detailedPageSize) || 1;
+
+  // 3. Catálogo de Modelos
+  const paginatedModels = useMemo(() => {
+    const start = (modelsPage - 1) * modelsPageSize;
+    return filteredModels.slice(start, start + modelsPageSize);
+  }, [filteredModels, modelsPage, modelsPageSize]);
+  const totalModelPages = Math.ceil(filteredModels.length / modelsPageSize) || 1;
+
+  // 4. Historial
+  const paginatedMovements = useMemo(() => {
+    const start = (historyPage - 1) * historyPageSize;
+    return movements.slice(start, start + historyPageSize);
+  }, [movements, historyPage, historyPageSize]);
+  const totalHistoryPages = Math.ceil(movements.length / historyPageSize) || 1;
+
+  // 5. Alertas
+  const paginatedAlerts = useMemo(() => {
+    const start = (alertsPage - 1) * alertsPageSize;
+    return alerts.slice(start, start + alertsPageSize);
+  }, [alerts, alertsPage, alertsPageSize]);
+  const totalAlertPages = Math.ceil(alerts.length / alertsPageSize) || 1;
 
   return (
     <div className="space-y-6 font-[Outfit]">
@@ -297,7 +545,7 @@ function InventarioYProductosContent() {
             }`}
           >
             <Package className="w-4 h-4" />
-            Catálogo Modelos ({variants.length})
+            Catálogo Modelos ({groupedModels.length})
           </button>
         )}
 
@@ -361,7 +609,8 @@ function InventarioYProductosContent() {
           </div>
 
           <Card className="overflow-hidden">
-            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1] flex items-center justify-between">
+            {/* Barra de Filtros y Switch de Vistas */}
+            <div className="p-4 border-b border-[#DDD9D0] bg-[#F8F6F1] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="relative flex-1 max-w-md">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
                 <input
@@ -369,76 +618,333 @@ function InventarioYProductosContent() {
                   placeholder="Buscar por SKU, modelo o color..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-[#DDD9D0] rounded-lg"
+                  className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-[#DDD9D0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
                 />
+              </div>
+
+              {/* Selector de Modo de Vista */}
+              <div className="flex items-center bg-white border border-[#DDD9D0] rounded-xl p-1 shadow-xs shrink-0 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => setStockViewMode("matrix")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    stockViewMode === "matrix"
+                      ? "bg-[#556B5D] text-white shadow-xs"
+                      : "text-[#6B7A71] hover:text-[#26302B]"
+                  }`}
+                  title="Vista agrupada con matriz de tallas"
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>Matriz de Tallas ({groupedStock.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStockViewMode("detailed")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    stockViewMode === "detailed"
+                      ? "bg-[#556B5D] text-white shadow-xs"
+                      : "text-[#6B7A71] hover:text-[#26302B]"
+                  }`}
+                  title="Vista clásica fila por SKU"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>Por SKU ({filteredStock.length})</span>
+                </button>
               </div>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[#DDD9D0] bg-[#F8F6F1] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
-                    <th className="py-3 px-4">SKU</th>
-                    <th className="py-3 px-4">Producto / Modelo</th>
-                    <th className="py-3 px-4">Variante</th>
-                    {isAdmin && <th className="py-3 px-4">Ubicación</th>}
-                    <th className="py-3 px-4 text-right">Precio Venta</th>
-                    <th className="py-3 px-4 text-center">Stock Actual</th>
-                    <th className="py-3 px-4 text-center">Estado</th>
-                    <th className="py-3 px-4 text-right">Acción</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
-                  {loadingInventory ? (
-                    <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">Cargando...</td></tr>
-                  ) : filteredStock.length === 0 ? (
-                    <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">No hay existencias registradas en tu sucursal.</td></tr>
-                  ) : filteredStock.map((item) => (
-                    <tr key={item.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
-                      <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{item.sku}</td>
-                      <td className="py-3 px-4 font-medium">{item.productName}</td>
-                      <td className="py-3 px-4 text-xs text-[#6B7A71]">
-                        {[
-                          item.colorName,
-                          item.sizeName ? `Talla ${item.sizeName}` : null,
-                          item.sleeveTypeName,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </td>
-                      {isAdmin && <td className="py-3 px-4 text-xs">{item.locationName}</td>}
-                      <td className="py-3 px-4 text-right font-medium">${item.salePrice.toFixed(2)}</td>
-                      <td className="py-3 px-4 text-center font-bold text-base">{item.quantity}</td>
-                      <td className="py-3 px-4 text-center">
-                        <Badge variant={item.quantity === 0 ? "error" : item.quantity <= item.minStock ? "warning" : "success"}>
-                          {item.quantity === 0 ? "Agotado" : item.quantity <= item.minStock ? "Bajo Stock" : "Disponible"}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {/* Seller: solo puede registrar entrada de mercancía */}
-                          {isSeller && (
-                            <button
-                              onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }}
-                              className="text-xs font-semibold text-[#3F7D58] hover:underline"
-                            >
-                              + Entrada
-                            </button>
-                          )}
-                          {/* Admin: ajuste y eliminar */}
-                          {isAdmin && (
-                            <>
-                              <button onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }} className="text-xs font-semibold text-[#556B5D] hover:underline">+ Ajustar</button>
-                              <button onClick={() => handleDeleteVariant(item)} className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
-                            </>
-                          )}
-                        </div>
-                      </td>
+            {/* ============================================================
+                VISTA 1: MATRIZ DE TALLAS AGRUPADA (SOLUCIÓN 2A)
+                ============================================================ */}
+            {stockViewMode === "matrix" && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#DDD9D0] bg-[#F8F6F1] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
+                      <th className="py-3 px-3 w-8"></th>
+                      <th className="py-3 px-4">Modelo / Guayabera</th>
+                      <th className="py-3 px-4">Color & Manga</th>
+                      {isAdmin && <th className="py-3 px-4">Ubicación</th>}
+                      <th className="py-3 px-4">Tallas en Existencia</th>
+                      <th className="py-3 px-4 text-right">Precio</th>
+                      <th className="py-3 px-4 text-center">Total Piezas</th>
+                      <th className="py-3 px-4 text-right">Desglose</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
+                    {loadingInventory ? (
+                      <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">Cargando existencias...</td></tr>
+                    ) : groupedStock.length === 0 ? (
+                      <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">No se encontraron existencias registradas.</td></tr>
+                    ) : (
+                      paginatedGroupedStock.map((grp) => (
+                        <Fragment key={grp.groupKey}>
+                          <tr className="hover:bg-[#F8F6F1]/50 transition-colors">
+                            {/* Botón expandir */}
+                            <td className="py-3 pl-3 pr-1 text-center">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandGroup(grp.groupKey)}
+                                className="p-1 rounded-md text-[#6B7A71] hover:text-[#26302B] hover:bg-white cursor-pointer"
+                                title="Expandir desglose de SKUs"
+                              >
+                                {expandedGroups[grp.groupKey] ? (
+                                  <ChevronDown className="w-4 h-4 text-[#556B5D]" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4" />
+                                )}
+                              </button>
+                            </td>
+
+                            {/* Modelo */}
+                            <td className="py-3 px-4">
+                              <span className="font-extrabold text-sm text-[#26302B] block">
+                                {grp.productName}
+                              </span>
+                              <span className="text-[11px] text-[#6B7A71] block">
+                                {grp.categoryName}
+                              </span>
+                            </td>
+
+                            {/* Color y Manga */}
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {grp.colorName && (
+                                  <span className="text-xs font-semibold text-[#26302B] bg-white px-2 py-0.5 rounded-md border border-[#DDD9D0]">
+                                    {grp.colorName}
+                                  </span>
+                                )}
+                                {grp.sleeveTypeName && (
+                                  <span className="text-xs font-bold text-[#556B5D] bg-[#EBF5F0] px-2 py-0.5 rounded-md border border-[#A7D7B9]">
+                                    {grp.sleeveTypeName}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* Sucursal (si es admin) */}
+                            {isAdmin && (
+                              <td className="py-3 px-4 text-xs font-medium text-[#6B7A71]">
+                                {grp.locationName}
+                              </td>
+                            )}
+
+                            {/* Matriz de Tallas (cuadrícula interactiva) */}
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {grp.sizes.map((s) => (
+                                  <button
+                                    key={s.variantId}
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedVariantId(s.variantId);
+                                      setIsAdjustmentModalOpen(true);
+                                    }}
+                                    title={`Talla ${s.sizeName} (SKU: ${s.sku}) · Clic para Entrada o Ajuste`}
+                                    className={`px-2 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 border shadow-xs cursor-pointer ${
+                                      s.quantity === 0
+                                        ? "bg-[#FAEAEA] text-[#B85450] border-[#B85450]/30 hover:bg-[#F5D8D8]"
+                                        : s.quantity <= s.minStock
+                                        ? "bg-[#FEF5E7] text-[#D97706] border-[#D97706]/30 hover:bg-[#FDEED3]"
+                                        : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#556B5D] hover:bg-[#F8F6F1]"
+                                    }`}
+                                  >
+                                    <span className="text-[#6B7A71] text-[10px] font-medium">T{s.sizeName}:</span>
+                                    <span className={s.quantity === 0 ? "text-[#B85450]" : "text-[#26302B]"}>
+                                      {s.quantity}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </td>
+
+                            {/* Precio */}
+                            <td className="py-3 px-4 text-right font-medium text-xs">
+                              ${grp.salePrice.toFixed(2)}
+                            </td>
+
+                            {/* Total Stock */}
+                            <td className="py-3 px-4 text-center">
+                              <span
+                                className={`inline-block px-2.5 py-1 rounded-xl text-xs font-black tracking-tight ${
+                                  grp.totalQuantity === 0
+                                    ? "bg-[#FAEAEA] text-[#B85450]"
+                                    : grp.totalQuantity <= grp.minStock
+                                    ? "bg-[#FEF5E7] text-[#D97706]"
+                                    : "bg-[#EBF5F0] text-[#3F7D58]"
+                                }`}
+                              >
+                                {grp.totalQuantity} pzas
+                              </span>
+                            </td>
+
+                            {/* Acción / Toggle */}
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                type="button"
+                                onClick={() => toggleExpandGroup(grp.groupKey)}
+                                className="text-xs font-bold text-[#556B5D] hover:underline cursor-pointer"
+                              >
+                                {expandedGroups[grp.groupKey] ? "Ocultar" : "Ver SKUs"}
+                              </button>
+                            </td>
+                          </tr>
+
+                          {/* Fila expandida con el desglose justo debajo de este modelo */}
+                          {expandedGroups[grp.groupKey] && (
+                            <tr className="bg-[#FAF7F2] border-b border-[#DDD9D0]">
+                              <td colSpan={isAdmin ? 8 : 7} className="p-4">
+                                <div className="bg-white rounded-xl border border-[#DDD9D0] p-4 shadow-xs">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <p className="text-xs font-bold text-[#26302B] uppercase tracking-wider font-[Outfit] flex items-center gap-2">
+                                      <Shirt className="w-4 h-4 text-[#556B5D]" />
+                                      Detalle de SKUs: {grp.productName} · {grp.colorName} · {grp.sleeveTypeName}
+                                    </p>
+                                    <span className="text-xs text-[#6B7A71]">
+                                      Sucursal: <b>{grp.locationName}</b>
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
+                                    {grp.sizes.map((sz) => (
+                                      <div
+                                        key={sz.variantId}
+                                        className="p-2.5 bg-[#F8F6F1] rounded-xl border border-[#DDD9D0] flex items-center justify-between gap-2"
+                                      >
+                                        <div className="min-w-0">
+                                          <span className="font-mono text-xs font-bold text-[#556B5D] block truncate">
+                                            {sz.sku}
+                                          </span>
+                                          <span className="text-xs text-[#6B7A71]">
+                                            Talla <b>{sz.sizeName}</b> · Stock:{" "}
+                                            <b className={sz.quantity === 0 ? "text-[#B85450]" : "text-[#26302B]"}>
+                                              {sz.quantity}
+                                            </b>
+                                          </span>
+                                        </div>
+                                        <Button
+                                          size="sm"
+                                          variant="outline"
+                                          className="text-xs h-7 px-2 shrink-0 font-bold text-[#556B5D]"
+                                          onClick={() => {
+                                            setSelectedVariantId(sz.variantId);
+                                            setIsAdjustmentModalOpen(true);
+                                          }}
+                                        >
+                                          {isSeller ? "+ Entrada" : "+ Ajuste"}
+                                        </Button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                <Pagination
+                  currentPage={matrixPage}
+                  totalPages={totalMatrixPages}
+                  totalItems={groupedStock.length}
+                  pageSize={matrixPageSize}
+                  onPageChange={setMatrixPage}
+                  onPageSizeChange={(size) => {
+                    setMatrixPageSize(size);
+                    setMatrixPage(1);
+                  }}
+                  pageSizeOptions={[10, 15, 25, 50]}
+                  itemLabel="modelos / colores"
+                />
+              </div>
+            )}
+
+            {/* ============================================================
+                VISTA 2: LISTA DETALLADA POR SKU (CLÁSICA)
+                ============================================================ */}
+            {stockViewMode === "detailed" && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#DDD9D0] bg-[#F8F6F1] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
+                      <th className="py-3 px-4">SKU</th>
+                      <th className="py-3 px-4">Producto / Modelo</th>
+                      <th className="py-3 px-4">Variante</th>
+                      {isAdmin && <th className="py-3 px-4">Ubicación</th>}
+                      <th className="py-3 px-4 text-right">Precio Venta</th>
+                      <th className="py-3 px-4 text-center">Stock Actual</th>
+                      <th className="py-3 px-4 text-center">Estado</th>
+                      <th className="py-3 px-4 text-right">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
+                    {loadingInventory ? (
+                      <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">Cargando existencias...</td></tr>
+                    ) : filteredStock.length === 0 ? (
+                      <tr><td colSpan={isAdmin ? 8 : 7} className="py-8 text-center text-[#6B7A71]">No hay existencias registradas en tu sucursal.</td></tr>
+                    ) : (
+                      paginatedDetailedStock.map((item) => (
+                        <tr key={item.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
+                          <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{item.sku}</td>
+                          <td className="py-3 px-4 font-medium">{item.productName}</td>
+                          <td className="py-3 px-4 text-xs text-[#6B7A71]">
+                            {[
+                              item.colorName,
+                              item.sizeName ? `Talla ${item.sizeName}` : null,
+                              item.sleeveTypeName,
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </td>
+                          {isAdmin && <td className="py-3 px-4 text-xs">{item.locationName}</td>}
+                          <td className="py-3 px-4 text-right font-medium">${item.salePrice.toFixed(2)}</td>
+                          <td className="py-3 px-4 text-center font-bold text-base">{item.quantity}</td>
+                          <td className="py-3 px-4 text-center">
+                            <Badge variant={item.quantity === 0 ? "error" : item.quantity <= item.minStock ? "warning" : "success"}>
+                              {item.quantity === 0 ? "Agotado" : item.quantity <= item.minStock ? "Bajo Stock" : "Disponible"}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {/* Seller: solo puede registrar entrada de mercancía */}
+                              {isSeller && (
+                                <button
+                                  onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }}
+                                  className="text-xs font-semibold text-[#3F7D58] hover:underline cursor-pointer"
+                                >
+                                  + Entrada
+                                </button>
+                              )}
+                              {/* Admin: ajuste y eliminar */}
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => { setSelectedVariantId(item.variantId); setIsAdjustmentModalOpen(true); }} className="text-xs font-semibold text-[#556B5D] hover:underline cursor-pointer">+ Ajustar</button>
+                                  <button onClick={() => handleDeleteVariant(item)} className="p-1 text-[#B85450] hover:bg-[#FAEAEA] rounded-lg cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                <Pagination
+                  currentPage={detailedPage}
+                  totalPages={totalDetailedPages}
+                  totalItems={filteredStock.length}
+                  pageSize={detailedPageSize}
+                  onPageChange={setDetailedPage}
+                  onPageSizeChange={(size) => {
+                    setDetailedPageSize(size);
+                    setDetailedPage(1);
+                  }}
+                  pageSizeOptions={[15, 25, 50, 100]}
+                  itemLabel="SKUs"
+                />
+              </div>
+            )}
           </Card>
         </div>
       )}
@@ -451,16 +957,16 @@ function InventarioYProductosContent() {
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#9DAAA2]" />
               <input
                 type="text"
-                placeholder="Buscar por modelo, SKU o color..."
+                placeholder="Buscar por modelo, SKU, color o manga..."
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-[#DDD9D0] rounded-lg"
+                className="w-full pl-9 pr-4 py-2 text-sm bg-white border border-[#DDD9D0] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
               />
             </div>
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="px-3 py-2 text-xs bg-white border border-[#DDD9D0] rounded-lg"
+              className="px-3 py-2 text-xs font-medium bg-white border border-[#DDD9D0] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#556B5D] cursor-pointer"
             >
               <option value="">Todas las Categorías</option>
               {categories.map((c) => (
@@ -473,71 +979,278 @@ function InventarioYProductosContent() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-[#F8F6F1] border-b border-[#DDD9D0] text-xs font-semibold text-[#6B7A71] uppercase tracking-wider">
-                  <th className="p-4">Foto</th>
-                  <th className="p-4">SKU</th>
-                  <th className="p-4">Modelo / Guayabera</th>
-                  <th className="p-4">Color</th>
-                  <th className="p-4">Talla</th>
-                  <th className="p-4">Precio Venta</th>
-                  <th className="p-4">Estado</th>
-                  <th className="p-4 text-right">Acciones</th>
+                  <th className="py-3.5 px-3 w-10 text-center"></th>
+                  <th className="py-3.5 px-4">Modelo / Guayabera</th>
+                  <th className="py-3.5 px-4">Categoría</th>
+                  <th className="py-3.5 px-4">Colores & Mangas</th>
+                  <th className="py-3.5 px-4">Tallas</th>
+                  <th className="py-3.5 px-4">Rango Precio</th>
+                  <th className="py-3.5 px-4 text-center">Variantes</th>
+                  <th className="py-3.5 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#DDD9D0] text-xs text-[#26302B]">
-                {filteredVariants.map((v) => (
-                  <tr key={v.id} className="hover:bg-[#F8F6F1]/60 transition-colors">
-                    <td className="p-4 w-14">
-                      <div
-                        onClick={() => v.product && setSelectedProductForEdit(v.product)}
-                        className="w-10 h-10 rounded-xl overflow-hidden bg-[#F8F6F1] border border-[#DDD9D0] flex items-center justify-center cursor-pointer"
-                      >
-                        {v.product?.imageUrl ? (
-                          <img src={v.product.imageUrl} alt={v.product.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <Shirt className="w-4 h-4 text-[#8FA393]" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-4 font-mono font-semibold text-[#556B5D]">{v.sku}</td>
-                    <td className="p-4 font-medium"><span className="font-semibold text-sm block">{v.product?.name}</span></td>
-                    <td className="p-4">{v.color?.name || "—"}</td>
-                    <td className="p-4">{v.size?.name ? <Badge variant="neutral">{v.size.name}</Badge> : "—"}</td>
-                    <td className="p-4 font-semibold text-sm">${v.salePrice.toFixed(2)}</td>
-                    <td className="p-4"><Badge variant={v.isActive ? "success" : "error"}>{v.isActive ? "Activo" : "Inactivo"}</Badge></td>
-                    <td className="p-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {v.product && (
+                {loadingProducts ? (
+                  <tr><td colSpan={8} className="py-10 text-center text-[#6B7A71]">Cargando catálogo de modelos...</td></tr>
+                ) : paginatedModels.length === 0 ? (
+                  <tr><td colSpan={8} className="py-10 text-center text-[#6B7A71]">No se encontraron modelos registrados.</td></tr>
+                ) : (
+                  paginatedModels.map((model) => (
+                    <Fragment key={model.productId}>
+                      <tr className="hover:bg-[#F8F6F1]/60 transition-colors">
+                        {/* Flechita expandir */}
+                        <td className="py-3.5 pl-3 pr-1 text-center">
                           <button
-                            onClick={() => setSelectedProductForEdit(v.product)}
-                            className="p-1.5 text-[#556B5D] hover:bg-[#EEF1EE] rounded-lg transition-colors cursor-pointer"
-                            title="Editar modelo, fotos y precios de tallas"
+                            type="button"
+                            onClick={() => toggleExpandModel(model.productId)}
+                            className="p-1 rounded-md text-[#6B7A71] hover:text-[#26302B] hover:bg-white cursor-pointer transition-colors"
+                            title="Ver variantes y SKUs"
                           >
-                            <Pencil className="w-4 h-4" />
+                            {expandedModels[model.productId] ? (
+                              <ChevronDown className="w-4 h-4 text-[#556B5D]" />
+                            ) : (
+                              <ChevronRight className="w-4 h-4" />
+                            )}
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleToggleVariantStatus(v.id, v.isActive)}
-                          className="p-1.5 text-[#6B7A71] hover:bg-[#F0EDE6] rounded-lg transition-colors cursor-pointer"
-                          title={v.isActive ? "Desactivar variante" : "Activar variante"}
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
-                        {v.product && (
+                        </td>
+
+                        {/* Foto y Nombre del modelo */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-3">
+                            <div
+                              onClick={() => setSelectedProductForEdit(model.product)}
+                              className="w-12 h-12 rounded-xl overflow-hidden bg-[#F8F6F1] border border-[#DDD9D0] flex items-center justify-center shrink-0 cursor-pointer shadow-2xs hover:border-[#556B5D] transition-colors"
+                              title="Clic para editar fotos y datos"
+                            >
+                              {model.imageUrl ? (
+                                <img src={model.imageUrl} alt={model.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <Shirt className="w-5 h-5 text-[#8FA393]" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProductForEdit(model.product)}
+                                className="font-bold text-sm text-[#26302B] hover:text-[#556B5D] text-left block truncate cursor-pointer"
+                              >
+                                {model.name}
+                              </button>
+                              {model.description && (
+                                <p className="text-[11px] text-[#6B7A71] line-clamp-1 mt-0.5">
+                                  {model.description}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Categoría */}
+                        <td className="py-3.5 px-4">
+                          <Badge variant="neutral">{model.categoryName}</Badge>
+                        </td>
+
+                        {/* Colores y Mangas */}
+                        <td className="py-3.5 px-4">
+                          <div className="space-y-1.5">
+                            {/* Colores */}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {model.colors.slice(0, 4).map((c) => (
+                                <span
+                                  key={c.id}
+                                  className="inline-flex items-center gap-1 text-[11px] font-medium bg-white px-2 py-0.5 rounded-md border border-[#DDD9D0]"
+                                >
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-black/10 shrink-0"
+                                    style={{ backgroundColor: c.hexCode || "#ccc" }}
+                                  />
+                                  {c.name}
+                                </span>
+                              ))}
+                              {model.colors.length > 4 && (
+                                <span className="text-[10px] text-[#6B7A71] font-semibold">
+                                  +{model.colors.length - 4} más
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Mangas */}
+                            <div className="flex items-center gap-1 flex-wrap">
+                              {model.sleeveTypes.map((sl) => (
+                                <span
+                                  key={sl.id}
+                                  className="text-[10px] font-bold text-[#556B5D] bg-[#EBF5F0] px-1.5 py-0.5 rounded border border-[#A7D7B9]"
+                                >
+                                  {sl.name}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Tallas disponibles */}
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-1 flex-wrap max-w-[180px]">
+                            {model.sizes.map((s) => (
+                              <span
+                                key={s.id}
+                                className="text-[11px] font-semibold text-[#26302B] bg-[#F8F6F1] px-1.5 py-0.5 rounded border border-[#DDD9D0]"
+                              >
+                                {s.name}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+
+                        {/* Rango de precio */}
+                        <td className="py-3.5 px-4 font-bold text-sm text-[#26302B]">
+                          {model.minPrice === model.maxPrice
+                            ? `$${model.minPrice.toFixed(2)}`
+                            : `$${model.minPrice.toFixed(2)} – $${model.maxPrice.toFixed(2)}`}
+                        </td>
+
+                        {/* Cantidad de variantes */}
+                        <td className="py-3.5 px-4 text-center">
                           <button
-                            onClick={() => handleDeleteProduct(v.product!.id, v.product!.name)}
-                            className="p-1.5 text-[#B85450] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                            title="Eliminar / Archivar modelo"
+                            type="button"
+                            onClick={() => toggleExpandModel(model.productId)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-[#F0EDE6] hover:bg-[#E7E3DA] text-[#26302B] transition-colors cursor-pointer"
+                            title="Clic para ver desglose de SKUs"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <span>{model.totalVariants} SKUs</span>
+                            {expandedModels[model.productId] ? (
+                              <ChevronDown className="w-3.5 h-3.5 text-[#556B5D]" />
+                            ) : (
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            )}
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                        </td>
+
+                        {/* Acciones del modelo */}
+                        <td className="py-3.5 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setSelectedProductForEdit(model.product)}
+                              className="p-1.5 text-[#556B5D] hover:bg-[#EEF1EE] rounded-lg transition-colors cursor-pointer"
+                              title="Editar modelo, fotos y precios de tallas"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteProduct(model.productId, model.name)}
+                              className="p-1.5 text-[#B85450] hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                              title="Eliminar / Archivar modelo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Subtabla expandida de variantes */}
+                      {expandedModels[model.productId] && (
+                        <tr className="bg-[#FAF7F2] border-b border-[#DDD9D0]">
+                          <td colSpan={8} className="p-4">
+                            <div className="bg-white rounded-xl border border-[#DDD9D0] overflow-hidden shadow-xs">
+                              <div className="p-3 bg-[#F8F6F1] border-b border-[#DDD9D0] flex items-center justify-between">
+                                <p className="text-xs font-bold text-[#26302B] uppercase tracking-wider flex items-center gap-2">
+                                  <Shirt className="w-4 h-4 text-[#556B5D]" />
+                                  Variantes registradas para: <strong>{model.name}</strong> ({model.activeVariantsCount} activas de {model.totalVariants})
+                                </p>
+                                <span className="text-xs text-[#6B7A71]">
+                                  Haz clic en el estado para activar o pausar un SKU individual
+                                </span>
+                              </div>
+
+                              <div className="overflow-x-auto max-h-[360px] overflow-y-auto">
+                                <table className="w-full text-left text-xs border-collapse">
+                                  <thead className="bg-[#FAF9F6] border-b border-[#DDD9D0] sticky top-0 text-[#6B7A71] uppercase text-[10px] font-bold">
+                                    <tr>
+                                      <th className="p-2.5 pl-4">SKU</th>
+                                      <th className="p-2.5">Color</th>
+                                      <th className="p-2.5">Manga</th>
+                                      <th className="p-2.5">Talla</th>
+                                      <th className="p-2.5">Precio Venta</th>
+                                      <th className="p-2.5 text-center">Estado</th>
+                                      <th className="p-2.5 pr-4 text-right">Acciones</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-[#DDD9D0]">
+                                    {model.variants.map((v) => (
+                                      <tr key={v.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
+                                        <td className="p-2.5 pl-4 font-mono font-bold text-[#556B5D]">{v.sku}</td>
+                                        <td className="p-2.5">
+                                          <span className="inline-flex items-center gap-1">
+                                            <span
+                                              className="w-2 h-2 rounded-full border border-black/10"
+                                              style={{ backgroundColor: v.color?.hexCode || "#ccc" }}
+                                            />
+                                            {v.color?.name || "—"}
+                                          </span>
+                                        </td>
+                                        <td className="p-2.5">{v.sleeveType?.name || "—"}</td>
+                                        <td className="p-2.5">
+                                          <span className="font-semibold bg-[#F0EDE6] px-1.5 py-0.5 rounded">
+                                            {v.size?.name || "—"}
+                                          </span>
+                                        </td>
+                                        <td className="p-2.5 font-bold">${v.salePrice.toFixed(2)}</td>
+                                        <td className="p-2.5 text-center">
+                                          <button
+                                            type="button"
+                                            onClick={() => handleToggleVariantStatus(v.id, v.isActive)}
+                                            className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-all cursor-pointer ${
+                                              v.isActive
+                                                ? "bg-[#EBF5F0] text-[#3F7D58] hover:bg-[#d8edd1]"
+                                                : "bg-[#FAEAEA] text-[#B85450] hover:bg-[#f3d0d0]"
+                                            }`}
+                                            title="Clic para cambiar estado"
+                                          >
+                                            {v.isActive ? "● Activo" : "○ Inactivo"}
+                                          </button>
+                                        </td>
+                                        <td className="p-2.5 pr-4 text-right">
+                                          <div className="flex items-center justify-end gap-1">
+                                            <button
+                                              onClick={() => {
+                                                setSelectedVariantId(v.id);
+                                                setIsAdjustmentModalOpen(true);
+                                              }}
+                                              className="text-xs font-semibold text-[#556B5D] hover:underline cursor-pointer"
+                                            >
+                                              + Ajuste
+                                            </button>
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={modelsPage}
+            totalPages={totalModelPages}
+            totalItems={filteredModels.length}
+            pageSize={modelsPageSize}
+            onPageChange={setModelsPage}
+            onPageSizeChange={(size) => {
+              setModelsPageSize(size);
+              setModelsPage(1);
+            }}
+            pageSizeOptions={[10, 20, 50]}
+            itemLabel="modelos"
+          />
         </Card>
       )}
 
@@ -556,18 +1269,35 @@ function InventarioYProductosContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
-                {movements.map((m) => (
-                  <tr key={m.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
-                    <td className="py-3 px-4 text-xs font-mono text-[#6B7A71]">{new Date(m.createdAt).toLocaleString("es-MX")}</td>
-                    <td className="py-3 px-4 font-mono font-semibold text-[#556B5D]">{m.sku} - {m.productName}</td>
-                    <td className="py-3 px-4 text-xs">{m.locationName}</td>
-                    <td className="py-3 px-4"><Badge variant="neutral">{m.type}</Badge></td>
-                    <td className="py-3 px-4 text-center font-bold">{m.quantity}</td>
-                  </tr>
-                ))}
+                {movements.length === 0 ? (
+                  <tr><td colSpan={5} className="py-8 text-center text-[#6B7A71]">No hay movimientos registrados.</td></tr>
+                ) : (
+                  paginatedMovements.map((m) => (
+                    <tr key={m.id} className="hover:bg-[#F8F6F1]/50 transition-colors">
+                      <td className="py-3 px-4 text-xs font-mono text-[#6B7A71]">{new Date(m.createdAt).toLocaleString("es-MX")}</td>
+                      <td className="py-3 px-4 font-mono font-semibold text-[#556B5D]">{m.sku} - {m.productName}</td>
+                      <td className="py-3 px-4 text-xs">{m.locationName}</td>
+                      <td className="py-3 px-4"><Badge variant="neutral">{m.type}</Badge></td>
+                      <td className="py-3 px-4 text-center font-bold">{m.quantity}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={historyPage}
+            totalPages={totalHistoryPages}
+            totalItems={movements.length}
+            pageSize={historyPageSize}
+            onPageChange={setHistoryPage}
+            onPageSizeChange={(size) => {
+              setHistoryPageSize(size);
+              setHistoryPage(1);
+            }}
+            pageSizeOptions={[15, 25, 50]}
+            itemLabel="movimientos"
+          />
         </Card>
       )}
 
@@ -585,17 +1315,34 @@ function InventarioYProductosContent() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#DDD9D0] text-sm text-[#26302B]">
-                {alerts.map((a) => (
-                  <tr key={a.variantId} className="hover:bg-[#F8F6F1]/50 transition-colors">
-                    <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{a.sku}</td>
-                    <td className="py-3 px-4 font-medium">{a.productName}</td>
-                    <td className="py-3 px-4 text-center font-bold text-[#B85450]">{a.currentStock}</td>
-                    <td className="py-3 px-4 text-center"><Badge variant={a.isOutOfStock ? "error" : "warning"}>{a.isOutOfStock ? "AGOTADO" : "BAJO STOCK"}</Badge></td>
-                  </tr>
-                ))}
+                {alerts.length === 0 ? (
+                  <tr><td colSpan={4} className="py-8 text-center text-[#6B7A71]">No hay alertas de stock pendientes.</td></tr>
+                ) : (
+                  paginatedAlerts.map((a) => (
+                    <tr key={a.variantId} className="hover:bg-[#F8F6F1]/50 transition-colors">
+                      <td className="py-3 px-4 font-mono font-medium text-[#556B5D]">{a.sku}</td>
+                      <td className="py-3 px-4 font-medium">{a.productName}</td>
+                      <td className="py-3 px-4 text-center font-bold text-[#B85450]">{a.currentStock}</td>
+                      <td className="py-3 px-4 text-center"><Badge variant={a.isOutOfStock ? "error" : "warning"}>{a.isOutOfStock ? "AGOTADO" : "BAJO STOCK"}</Badge></td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+          <Pagination
+            currentPage={alertsPage}
+            totalPages={totalAlertPages}
+            totalItems={alerts.length}
+            pageSize={alertsPageSize}
+            onPageChange={setAlertsPage}
+            onPageSizeChange={(size) => {
+              setAlertsPageSize(size);
+              setAlertsPage(1);
+            }}
+            pageSizeOptions={[15, 25, 50]}
+            itemLabel="alertas"
+          />
         </Card>
       )}
 
@@ -607,7 +1354,7 @@ function InventarioYProductosContent() {
         preselectedVariantId={selectedVariantId}
       />
 
-      <ProductModal
+      <QuickProductModal
         isOpen={showProductModal}
         onClose={() => setShowProductModal(false)}
         onSuccess={() => { loadProductsData(); loadInventoryData(); }}
