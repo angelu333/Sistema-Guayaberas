@@ -246,23 +246,31 @@ export function ProductDetailModal({
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row rounded-3xl overflow-hidden shadow-2xl bg-white animate-fade-in"
+        className="relative w-full max-w-4xl max-h-[92vh] flex flex-col md:flex-row rounded-3xl overflow-hidden shadow-2xl bg-white animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Botón flotante para cerrar (siempre visible en móvil y desktop) */}
+        <button
+          onClick={onClose}
+          className="absolute top-3 right-3 z-30 w-8 h-8 rounded-full bg-white/90 backdrop-blur-sm text-[#26302B] hover:bg-white shadow-md flex items-center justify-center transition-all cursor-pointer"
+          title="Cerrar ventana"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
         {/* ============================================================
             PANEL IZQUIERDO: CARRUSEL DE IMÁGENES + ZOOM
             ============================================================ */}
         <div
-          className="relative w-full md:w-1/2 flex flex-col justify-between shrink-0"
-          style={{ backgroundColor: "#F5EFE3", minHeight: "320px" }}
+          className="relative w-full md:w-1/2 flex flex-col justify-between shrink-0 bg-[#F5EFE3] h-52 sm:h-64 md:h-auto md:min-h-[440px]"
         >
           {/* Imagen Principal */}
-          <div className="relative flex-1 flex items-center justify-center overflow-hidden aspect-3/4 md:aspect-auto">
+          <div className="relative flex-1 flex items-center justify-center overflow-hidden h-full">
             {images.length > 0 ? (
               <img
                 src={images[activeImageIndex]}
                 alt={product.name}
-                className="w-full h-full object-cover object-top transition-all duration-300 cursor-zoom-in"
+                className="w-full h-full object-contain md:object-cover object-center md:object-top transition-all duration-300 cursor-zoom-in"
                 onClick={() => setIsZoomOpen(true)}
               />
             ) : (
@@ -276,7 +284,7 @@ export function ProductDetailModal({
             {images.length > 0 && (
               <button
                 onClick={() => setIsZoomOpen(true)}
-                className="absolute top-4 left-4 p-2 rounded-xl bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
+                className="absolute top-3 left-3 p-1.5 rounded-xl bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
                 title="Ampliar imagen"
               >
                 <ZoomIn className="w-4 h-4" />
@@ -288,13 +296,13 @@ export function ProductDetailModal({
               <>
                 <button
                   onClick={handlePrevImage}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <button
                   onClick={handleNextImage}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-full bg-white/80 backdrop-blur-xs text-[#26302B] hover:bg-white transition-colors shadow-xs cursor-pointer"
                 >
                   <ChevronRight className="w-4 h-4" />
                 </button>
@@ -304,12 +312,12 @@ export function ProductDetailModal({
 
           {/* Miniaturas */}
           {images.length > 1 && (
-            <div className="p-3 flex items-center justify-center gap-2 overflow-x-auto bg-black/5">
+            <div className="p-2 md:p-3 flex items-center justify-center gap-1.5 md:gap-2 overflow-x-auto bg-black/5 shrink-0">
               {images.map((imgUrl, idx) => (
                 <button
                   key={idx}
                   onClick={() => setActiveImageIndex(idx)}
-                  className="w-12 h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer"
+                  className="w-9 h-9 md:w-12 md:h-12 rounded-lg overflow-hidden border-2 transition-all shrink-0 cursor-pointer"
                   style={{
                     borderColor: activeImageIndex === idx ? "#556B5D" : "transparent",
                     opacity: activeImageIndex === idx ? 1 : 0.6,
@@ -325,21 +333,15 @@ export function ProductDetailModal({
         {/* ============================================================
             PANEL DERECHO: DETALLES, SELECCIÓN Y COMPRA
             ============================================================ */}
-        <div className="w-full md:w-1/2 flex flex-col overflow-y-auto max-h-[92vh] bg-white">
-          {/* Header */}
-          <div className="p-5 border-b flex items-center justify-between" style={{ borderColor: "#EDE7DA" }}>
+        <div className="w-full md:w-1/2 flex flex-col flex-1 min-h-0 bg-white overflow-hidden">
+          {/* Header visible en desktop */}
+          <div className="hidden md:flex p-4 border-b items-center justify-between" style={{ borderColor: "#EDE7DA" }}>
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#8B7D6B]">
               Detalle de Producto
             </span>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-full hover:bg-[#FAF7F2] text-[#8B7D6B] hover:text-[#26302B] transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
-          <div className="p-5 space-y-4 flex-1">
+          <div className="p-4 md:p-5 space-y-3.5 flex-1 overflow-y-auto">
             {/* Categoría y Título */}
             <div>
               {product.categoryName && (
@@ -521,7 +523,7 @@ export function ProductDetailModal({
 
           {/* Footer del modal: Cantidad + Doble Botón (Agregar al Pedido vs Comprar WhatsApp) */}
           <div
-            className="p-5 border-t space-y-3 sticky bottom-0 bg-white"
+            className="p-3 sm:p-5 border-t space-y-2.5 sm:space-y-3 bg-white shrink-0 shadow-lg"
             style={{ borderColor: "#EDE7DA" }}
           >
             {/* Selector de Cantidad */}
@@ -534,21 +536,21 @@ export function ProductDetailModal({
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="w-8 h-8 rounded-lg bg-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
                   style={{ color: "#26302B" }}
                 >
-                  <Minus className="w-3.5 h-3.5" />
+                  <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
-                <span className="font-bold text-sm font-mono px-3 min-w-[32px] text-center" style={{ color: "#26302B" }}>
+                <span className="font-bold text-xs sm:text-sm font-mono px-2.5 min-w-[28px] text-center" style={{ color: "#26302B" }}>
                   {quantity}
                 </span>
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.min(isOutOfStock ? 1 : 99, q + 1))}
-                  className="w-8 h-8 rounded-lg text-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
+                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-white font-bold flex items-center justify-center shadow-xs cursor-pointer"
                   style={{ backgroundColor: "#556B5D" }}
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                 </button>
               </div>
             </div>
@@ -558,7 +560,7 @@ export function ProductDetailModal({
               <button
                 onClick={handleAddToCartClick}
                 disabled={isOutOfStock || !matchingVariant}
-                className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl text-xs font-bold text-white transition-all shadow-md active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 rounded-xl text-xs font-bold text-white transition-all shadow-md active:scale-98 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ backgroundColor: addedSuccess ? "#3F7D58" : "#26302B" }}
               >
                 {addedSuccess ? (

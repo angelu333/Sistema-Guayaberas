@@ -309,39 +309,41 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
 
         {/* HEADER */}
         <div
-          className="px-6 py-4 border-b border-[#E7E3DA] flex items-center justify-between shrink-0"
+          className="px-4 sm:px-6 py-3 sm:py-4 border-b border-[#E7E3DA] flex items-center justify-between shrink-0"
           style={{ background: "linear-gradient(to right, rgba(63,125,88,0.08), #F8F6F1)" }}
         >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-[#3F7D58] flex items-center justify-center shadow-sm">
-              <Shirt className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#3F7D58] flex items-center justify-center shrink-0 shadow-sm">
+              <Shirt className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
-            <div>
-              <h2 className="text-base font-extrabold text-[#26302B] leading-tight" style={{ fontFamily: "Outfit, sans-serif" }}>
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-extrabold text-[#26302B] leading-tight truncate" style={{ fontFamily: "Outfit, sans-serif" }}>
                 {step === 1 ? "Registrar Nuevo Modelo" : "Asignar Stock por Talla"}
               </h2>
-              <p className="text-[11px] text-[#6B7A71]">
+              <p className="text-[10px] sm:text-[11px] text-[#6B7A71] truncate">
                 {step === 1
-                  ? "Elige colores, tallas y manga — las variantes se generan solas ✨"
+                  ? "Elige colores, tallas y manga — variantes automáticas ✨"
                   : `${name} · ¿Cuántas piezas entran por talla?`}
               </p>
             </div>
           </div>
 
-          {/* Stepper visual */}
-          <div className="flex items-center gap-2 mr-3">
-            <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-extrabold border-2 transition-all ${step === 1 ? "bg-[#3F7D58] text-white border-[#3F7D58]" : "bg-white text-[#3F7D58] border-[#3F7D58]"}`}>
-              {step > 1 ? <Check className="w-3.5 h-3.5" /> : "1"}
+          <div className="flex items-center gap-2 shrink-0 ml-2">
+            {/* Stepper visual */}
+            <div className="flex items-center gap-1.5 mr-1 sm:mr-3">
+              <div className={`flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full text-[11px] sm:text-xs font-extrabold border-2 transition-all ${step === 1 ? "bg-[#3F7D58] text-white border-[#3F7D58]" : "bg-white text-[#3F7D58] border-[#3F7D58]"}`}>
+                {step > 1 ? <Check className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> : "1"}
+              </div>
+              <div className="w-3 sm:w-5 h-0.5 bg-[#DDD9D0]" />
+              <div className={`flex items-center justify-center w-6 h-6 sm:w-7 sm:h-7 rounded-full text-[11px] sm:text-xs font-extrabold border-2 transition-all ${step === 2 ? "bg-[#3F7D58] text-white border-[#3F7D58]" : "bg-[#F0EDE8] text-[#9DAAA2] border-[#DDD9D0]"}`}>
+                2
+              </div>
             </div>
-            <div className="w-5 h-0.5 bg-[#DDD9D0]" />
-            <div className={`flex items-center justify-center w-7 h-7 rounded-full text-xs font-extrabold border-2 transition-all ${step === 2 ? "bg-[#3F7D58] text-white border-[#3F7D58]" : "bg-[#F0EDE8] text-[#9DAAA2] border-[#DDD9D0]"}`}>
-              2
-            </div>
-          </div>
 
-          <button onClick={onClose} className="w-8 h-8 rounded-lg text-[#6B7A71] hover:bg-[#E7E3DA] flex items-center justify-center transition-colors cursor-pointer">
-            <X className="w-5 h-5" />
-          </button>
+            <button onClick={onClose} className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg text-[#6B7A71] hover:bg-[#E7E3DA] flex items-center justify-center transition-colors cursor-pointer">
+              <X className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+          </div>
         </div>
 
         {/* ==============================
@@ -349,10 +351,10 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
             ============================== */}
         {step === 1 && (
           <>
-            <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-hidden">
+            <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
 
               {/* COLUMNA IZQUIERDA: FOTO + SUCURSAL */}
-              <div className="md:w-52 shrink-0 bg-[#F8F6F1] border-r border-[#E7E3DA] flex flex-col gap-3 p-4 overflow-y-auto">
+              <div className="w-full md:w-52 shrink-0 bg-[#F8F6F1] border-b md:border-b-0 md:border-r border-[#E7E3DA] flex flex-col gap-2.5 p-3 sm:p-4">
                 <p className="text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider">Foto del Modelo</p>
 
                 <div
@@ -361,10 +363,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                   onDrop={async (e) => { e.preventDefault(); setPhotoDragging(false); const f = e.dataTransfer.files[0]; if (f) await handlePhotoFile(f); }}
                   onClick={() => photoInputRef.current?.click()}
                   className={[
-                    "relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden",
+                    "relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden h-24 md:h-auto md:aspect-square w-full",
                     photoDragging ? "border-[#3F7D58] bg-[#EBF5F0]" : photoUrl ? "border-[#3F7D58]/40 bg-white" : "border-[#DDD9D0] bg-white hover:border-[#3F7D58]/60 hover:bg-[#F0F4F1]",
                   ].join(" ")}
-                  style={{ aspectRatio: "1" }}
                 >
                   {photoUrl ? (
                     <>
@@ -375,15 +376,17 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                       </div>
                     </>
                   ) : (
-                    <>
-                      <div className="w-10 h-10 rounded-full bg-[#E7E3DA] flex items-center justify-center mb-2">
-                        <Upload className="w-5 h-5 text-[#6B7A71]" />
+                    <div className="flex flex-row md:flex-col items-center justify-center gap-2 md:gap-1 p-2">
+                      <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-[#E7E3DA] flex items-center justify-center shrink-0">
+                        <Upload className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#6B7A71]" />
                       </div>
-                      <p className="text-[11px] text-[#6B7A71] text-center font-medium leading-snug px-2">
-                        Arrastra una foto o haz clic
-                      </p>
-                      <p className="text-[10px] text-[#9DAAA2] mt-0.5">Opcional</p>
-                    </>
+                      <div className="text-left md:text-center">
+                        <p className="text-[11px] text-[#6B7A71] font-medium leading-snug">
+                          Arrastra una foto o haz clic
+                        </p>
+                        <p className="text-[10px] text-[#9DAAA2]">Opcional</p>
+                      </div>
+                    </div>
                   )}
                 </div>
 
@@ -401,7 +404,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                   </button>
                 )}
 
-                <div className="mt-auto">
+                <div className="mt-1 md:mt-auto">
                   <label className="text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider flex items-center gap-1 mb-1">
                     <MapPin className="w-3 h-3" /> Sucursal
                   </label>
@@ -416,7 +419,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
               </div>
 
               {/* COLUMNA DERECHA: DATOS */}
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 sm:space-y-5">
 
                 {error && (
                   <div className="p-3 bg-[#FAEAEA] border border-[#B85450]/30 rounded-xl text-xs text-[#B85450] flex items-center gap-2">
@@ -562,18 +565,15 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
             </div>
 
             {/* FOOTER PASO 1 */}
-            <div className="px-5 py-4 border-t border-[#E7E3DA] bg-[#F8F6F1] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="px-4 sm:px-5 py-3 sm:py-4 border-t border-[#E7E3DA] bg-[#F8F6F1] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
               <div className={[
-                "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all",
+                "flex items-center justify-center sm:justify-start gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold transition-all text-center",
                 totalVariants > 0 ? "bg-[#3F7D58] text-white shadow-sm" : "bg-[#E7E3DA] text-[#9DAAA2]",
               ].join(" ")}>
-                <Sparkles className="w-4 h-4 shrink-0" />
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                 {totalVariants > 0 ? (
                   <span>
-                    {selectedColors.size} color{selectedColors.size !== 1 ? "es" : ""}{" "}
-                    &times; {selectedSizes.size} talla{selectedSizes.size !== 1 ? "s" : ""}{" "}
-                    &times; {selectedSleeves.size} manga{selectedSleeves.size !== 1 ? "s" : ""}{" "}
-                    = <strong>{totalVariants} variantes</strong>
+                    {selectedColors.size} col &times; {selectedSizes.size} tal &times; {selectedSleeves.size} man = <strong>{totalVariants} variantes</strong>
                   </span>
                 ) : (
                   <span>Selecciona colores, tallas y manga</span>
@@ -584,7 +584,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl border border-[#DDD9D0] text-sm font-bold text-[#6B7A71] hover:bg-[#E7E3DA] transition-colors cursor-pointer"
+                  className="flex-1 sm:flex-initial px-3.5 sm:px-4 py-2 rounded-xl border border-[#DDD9D0] text-xs sm:text-sm font-bold text-[#6B7A71] hover:bg-[#E7E3DA] transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
@@ -593,15 +593,15 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                   onClick={handleGoToStep2}
                   disabled={totalVariants === 0}
                   className={[
-                    "px-5 py-2 rounded-xl text-sm font-extrabold text-white transition-all flex items-center gap-2 shadow-sm",
+                    "flex-1 sm:flex-initial px-4 sm:px-5 py-2 rounded-xl text-xs sm:text-sm font-extrabold text-white transition-all flex items-center justify-center gap-1.5 sm:gap-2 shadow-sm",
                     totalVariants === 0
                       ? "bg-[#9DAAA2] cursor-not-allowed"
                       : "bg-[#3F7D58] hover:bg-[#2F6348] active:scale-95 cursor-pointer",
                   ].join(" ")}
                 >
-                  <Package className="w-4 h-4" />
-                  Siguiente: Asignar Stock
-                  <ChevronRight className="w-4 h-4" />
+                  <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                  Siguiente: Stock
+                  <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             </div>
@@ -613,13 +613,13 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
             ============================== */}
         {step === 2 && (
           <>
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
 
-              {/* Resumen del modelo */}
-              <div className="mb-5 p-4 rounded-2xl border border-[#E7E3DA] bg-[#F8F6F1] flex items-start gap-4">
+              {/* RESUMEN DEL MODELO */}
+              <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-[#F8F6F1] rounded-2xl border border-[#E7E3DA] flex items-center gap-3">
                 {photoUrl && (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={photoUrl} alt="Modelo" className="w-14 h-14 rounded-xl object-cover border border-[#DDD9D0] shrink-0" />
+                  <img src={photoUrl} alt="Modelo" className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-[#DDD9D0] shrink-0" />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-extrabold text-[#26302B] text-sm truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{name}</p>
@@ -636,7 +636,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                       </span>
                     ))}
                   </div>
-                  <p className="text-[11px] text-[#9DAAA2] mt-1">
+                  <p className="text-[10px] sm:text-[11px] text-[#9DAAA2] mt-1">
                     {totalVariants} variantes en total · stock por talla aplica a todos los colores y mangas
                   </p>
                 </div>
@@ -672,32 +672,32 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                   return (
                     <div
                       key={s.id}
-                      className={`rounded-2xl border-2 p-4 flex flex-col items-center gap-3 transition-all ${qty > 0 ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white"}`}
+                      className={`rounded-2xl border-2 p-3 sm:p-4 flex flex-col items-center gap-2 sm:gap-3 transition-all ${qty > 0 ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white"}`}
                     >
-                      <span className={`text-lg font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <span className={`text-base sm:text-lg font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
                         {s.name}
                       </span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 sm:gap-2">
                         <button
                           type="button"
                           onClick={() => setStockBySize((prev) => ({ ...prev, [s.id]: Math.max(0, (prev[s.id] ?? 0) - 1) }))}
-                          className="w-8 h-8 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
                         >
-                          <Minus className="w-3.5 h-3.5" />
+                          <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </button>
                         <input
                           type="number"
                           min={0}
                           value={qty}
                           onChange={(e) => setStockBySize((prev) => ({ ...prev, [s.id]: Math.max(0, Number(e.target.value)) }))}
-                          className={`w-12 text-center text-lg font-extrabold rounded-xl border py-1 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"}`}
+                          className={`w-10 sm:w-12 text-center text-base sm:text-lg font-extrabold rounded-xl border py-1 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"}`}
                         />
                         <button
                           type="button"
                           onClick={() => setStockBySize((prev) => ({ ...prev, [s.id]: (prev[s.id] ?? 0) + 1 }))}
-                          className="w-8 h-8 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
                         >
-                          <Plus className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                         </button>
                       </div>
                       <span className="text-[10px] text-[#9DAAA2]">
@@ -709,7 +709,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
               </div>
 
               {/* Acceso rápido: poner misma cantidad a todas */}
-              <div className="mt-5 flex items-center gap-3 flex-wrap">
+              <div className="mt-4 sm:mt-5 flex items-center gap-2 sm:gap-3 flex-wrap">
                 <p className="text-xs text-[#9DAAA2] font-medium">Acceso rápido:</p>
                 {[2, 5, 10, 15, 20].map((n) => (
                   <button
@@ -718,23 +718,19 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                     onClick={() => {
                       const bulk: Record<string, number> = {};
                       selectedSizeArr.forEach((s) => { bulk[s.id] = n; });
-                      setStockBySize((prev) => ({ ...prev, ...bulk }));
+                      setStockBySize(bulk);
                     }}
-                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F0EDE8] text-[#556B5D] hover:bg-[#E7E3DA] transition-colors cursor-pointer border border-[#DDD9D0]"
+                    className="px-2.5 py-1 rounded-lg border border-[#DDD9D0] bg-white text-xs font-bold text-[#556B5D] hover:border-[#3F7D58] hover:bg-[#F0F4F1] transition-all cursor-pointer shadow-xs"
                   >
-                    {n} en todas
+                    +{n} a todas
                   </button>
                 ))}
                 <button
                   type="button"
-                  onClick={() => {
-                    const bulk: Record<string, number> = {};
-                    selectedSizeArr.forEach((s) => { bulk[s.id] = 0; });
-                    setStockBySize((prev) => ({ ...prev, ...bulk }));
-                  }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#FAEAEA] text-[#B85450] hover:bg-[#F5D5D5] transition-colors cursor-pointer border border-[#B85450]/30"
+                  onClick={() => setStockBySize({})}
+                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-[#B85450] hover:underline cursor-pointer"
                 >
-                  Limpiar todo
+                  Limpiar
                 </button>
               </div>
 
@@ -755,11 +751,11 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
             </div>
 
             {/* FOOTER PASO 2 */}
-            <div className="px-5 py-4 border-t border-[#E7E3DA] bg-[#F8F6F1] flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+            <div className="px-4 sm:px-5 py-3 sm:py-4 border-t border-[#E7E3DA] bg-[#F8F6F1] flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3 shrink-0">
               <button
                 type="button"
                 onClick={() => { setStep(1); setError(null); }}
-                className="px-4 py-2 rounded-xl border border-[#DDD9D0] text-sm font-bold text-[#6B7A71] hover:bg-[#E7E3DA] transition-colors cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-2 sm:py-2.5 rounded-xl border border-[#DDD9D0] text-xs sm:text-sm font-bold text-[#6B7A71] hover:bg-[#E7E3DA] transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <ChevronLeft className="w-4 h-4" />
                 Volver a Modificar
@@ -770,7 +766,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                 onClick={handleSubmit}
                 disabled={loading || success}
                 className={[
-                  "px-6 py-2.5 rounded-xl text-sm font-extrabold text-white transition-all flex items-center gap-2 shadow-sm",
+                  "px-5 sm:px-6 py-2.5 rounded-xl text-xs sm:text-sm font-extrabold text-white transition-all flex items-center justify-center gap-2 shadow-sm",
                   loading || success
                     ? "bg-[#9DAAA2] cursor-not-allowed"
                     : "bg-[#3F7D58] hover:bg-[#2F6348] active:scale-95 cursor-pointer",
