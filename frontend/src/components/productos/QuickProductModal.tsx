@@ -100,8 +100,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   const [showAddSize, setShowAddSize] = useState(false);
   const [showAddCategory, setShowAddCategory] = useState(false);
 
-  // Paso 2: Stock por talla { [sizeId]: number }
-  const [stockBySize, setStockBySize] = useState<Record<string, number>>({});
+  // Paso 2: Stock por tipo de manga y talla { [sleeveId]: { [sizeId]: number } }
+  const [stockBySleeveAndSize, setStockBySleeveAndSize] = useState<Record<string, Record<string, number>>>({});
+  const [activeSleeveStep2, setActiveSleeveStep2] = useState<string>("");
 
   // Estado general
   const [loading, setLoading] = useState(false);
@@ -146,7 +147,8 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setShowAddColor(false);
     setShowAddSize(false);
     setShowAddCategory(false);
-    setStockBySize({});
+    setStockBySleeveAndSize({});
+    setActiveSleeveStep2("");
     setNewColorName("");
     setNewSizeName("");
     setNewCategoryName("");
@@ -231,12 +233,24 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     if (selectedColors.size === 0) { setError("Selecciona al menos un color."); return; }
     if (selectedSizes.size === 0) { setError("Selecciona al menos una talla."); return; }
     if (selectedSleeves.size === 0) { setError("Selecciona al menos un tipo de manga."); return; }
-    // Inicializar stock en 0 para cada talla seleccionada
-    const initStock: Record<string, number> = {};
-    allSizes.filter((s) => selectedSizes.has(s.id)).forEach((s) => {
-      initStock[s.id] = stockBySize[s.id] ?? 0;
+
+    const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
+    const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
+
+    // Inicializar matriz de stock para cada manga y talla
+    const nextStock: Record<string, Record<string, number>> = {};
+    selectedSleeveArr.forEach((sl) => {
+      nextStock[sl.id] = nextStock[sl.id] || {};
+      selectedSizeArr.forEach((s) => {
+        nextStock[sl.id][s.id] = stockBySleeveAndSize[sl.id]?.[s.id] ?? 0;
+      });
     });
-    setStockBySize(initStock);
+    setStockBySleeveAndSize(nextStock);
+
+    if (!activeSleeveStep2 || !selectedSleeves.has(activeSleeveStep2)) {
+      setActiveSleeveStep2(selectedSleeveArr[0]?.id || "");
+    }
+
     setStep(2);
   };
 
@@ -253,10 +267,10 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
 
       const variants: CreateVariantDTO[] = [];
       for (const color of colorArr) {
-        for (const size of sizeArr) {
-          for (const sleeve of sleeveArr) {
+        for (const sleeve of sleeveArr) {
+          for (const size of sizeArr) {
             const salePrice = priceBySleve[sleeve.id] ?? 750;
-            const stockForSize = stockBySize[size.id] ?? 0;
+            const stockForSize = stockBySleeveAndSize[sleeve.id]?.[size.id] ?? 0;
             variants.push({
               colorId: color.id,
               sizeId: size.id,
@@ -637,7 +651,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                     ))}
                   </div>
                   <p className="text-[10px] sm:text-[11px] text-[#9DAAA2] mt-1">
-                    {totalVariants} variantes en total · stock por talla aplica a todos los colores y mangas
+                    {totalVariants} variantes en total · stock configurable por tipo de manga
                   </p>
                 </div>
               </div>
@@ -656,98 +670,222 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                 </div>
               )}
 
-              {/* INSTRUCCIÓN */}
-              <div className="mb-4">
-                <h3 className="text-sm font-extrabold text-[#26302B] mb-0.5">¿Cuántas piezas entran de cada talla?</h3>
-                <p className="text-xs text-[#6B7A71]">
-                  Este stock inicial se asignará a <strong>todos los colores</strong> y <strong>tipos de manga</strong> seleccionados.
-                  Si una talla no entra, deja en 0.
-                </p>
-              </div>
-
-              {/* GRID DE TALLAS */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {selectedSizeArr.map((s) => {
-                  const qty = stockBySize[s.id] ?? 0;
-                  return (
-                    <div
-                      key={s.id}
-                      className={`rounded-2xl border-2 p-3 sm:p-4 flex flex-col items-center gap-2 sm:gap-3 transition-all ${qty > 0 ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white"}`}
-                    >
-                      <span className={`text-base sm:text-lg font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {s.name}
-                      </span>
-                      <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* SELECTOR DE PESTAÑAS POR MANGA (SI HAY MÁS DE 1 MANGA) */}
+              {selectedSleeveArr.length > 1 && (
+                <div className="mb-4">
+                  <p className="text-xs font-bold text-[#6B7A71] mb-2">Selecciona la manga para asignar sus piezas:</p>
+                  <div className="flex items-center gap-2 p-1.5 bg-[#F0EDE8] rounded-2xl flex-wrap sm:flex-nowrap">
+                    {selectedSleeveArr.map((sl) => {
+                      const isActive = sl.id === activeSleeveStep2;
+                      const sleeveTotal = Object.values(stockBySleeveAndSize[sl.id] || {}).reduce((a, b) => a + b, 0);
+                      const sleevePrice = priceBySleve[sl.id] ?? 750;
+                      return (
                         <button
+                          key={sl.id}
                           type="button"
-                          onClick={() => setStockBySize((prev) => ({ ...prev, [s.id]: Math.max(0, (prev[s.id] ?? 0) - 1) }))}
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
+                          onClick={() => setActiveSleeveStep2(sl.id)}
+                          className={`flex-1 min-w-[140px] py-2.5 px-3.5 rounded-xl text-xs font-extrabold flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-white text-[#26302B] shadow-sm border border-[#3F7D58]/30 ring-2 ring-[#3F7D58]/20"
+                              : "text-[#6B7A71] hover:text-[#26302B] hover:bg-white/60"
+                          }`}
                         >
-                          <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                          <div className="flex items-center gap-1.5 text-left">
+                            <Shirt className={`w-3.5 h-3.5 ${isActive ? "text-[#3F7D58]" : "text-[#9DAAA2]"}`} />
+                            <div>
+                              <div className="leading-tight">{sl.name}</div>
+                              <div className="text-[10px] font-medium text-[#9DAAA2]">${sleevePrice.toLocaleString()}</div>
+                            </div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded-full text-[11px] font-extrabold ${
+                            sleeveTotal > 0 ? "bg-[#EBF5F0] text-[#3F7D58]" : "bg-[#DDD9D0]/60 text-[#9DAAA2]"
+                          }`}>
+                            {sleeveTotal} pzas
+                          </span>
                         </button>
-                        <input
-                          type="number"
-                          min={0}
-                          value={qty}
-                          onChange={(e) => setStockBySize((prev) => ({ ...prev, [s.id]: Math.max(0, Number(e.target.value)) }))}
-                          className={`w-10 sm:w-12 text-center text-base sm:text-lg font-extrabold rounded-xl border py-1 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"}`}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setStockBySize((prev) => ({ ...prev, [s.id]: (prev[s.id] ?? 0) + 1 }))}
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                        </button>
-                      </div>
-                      <span className="text-[10px] text-[#9DAAA2]">
-                        {qty > 0 ? `${qty} pzas` : "Sin stock"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Acceso rápido: poner misma cantidad a todas */}
-              <div className="mt-4 sm:mt-5 flex items-center gap-2 sm:gap-3 flex-wrap">
-                <p className="text-xs text-[#9DAAA2] font-medium">Acceso rápido:</p>
-                {[2, 5, 10, 15, 20].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => {
-                      const bulk: Record<string, number> = {};
-                      selectedSizeArr.forEach((s) => { bulk[s.id] = n; });
-                      setStockBySize(bulk);
-                    }}
-                    className="px-2.5 py-1 rounded-lg border border-[#DDD9D0] bg-white text-xs font-bold text-[#556B5D] hover:border-[#3F7D58] hover:bg-[#F0F4F1] transition-all cursor-pointer shadow-xs"
-                  >
-                    +{n} a todas
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setStockBySize({})}
-                  className="px-2.5 py-1 rounded-lg text-xs font-bold text-[#B85450] hover:underline cursor-pointer"
-                >
-                  Limpiar
-                </button>
-              </div>
-
-              {/* Resumen del stock total */}
-              {Object.values(stockBySize).some((v) => v > 0) && (
-                <div className="mt-4 p-3 bg-[#EBF5F0] rounded-xl border border-[#3F7D58]/20 text-xs text-[#3F7D58] font-bold flex items-center gap-2">
-                  <Package className="w-4 h-4 shrink-0" />
-                  Stock total a ingresar:{" "}
-                  <strong>
-                    {Object.values(stockBySize).reduce((a, b) => a + b, 0)} pzas por color/manga
-                  </strong>
-                  {" = "}
-                  <strong>
-                    {Object.values(stockBySize).reduce((a, b) => a + b, 0) * selectedColors.size * selectedSleeves.size} pzas en total
-                  </strong>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
+
+              {/* INSTRUCCIÓN DE LA MANGA ACTIVA */}
+              {(() => {
+                const currentSleeve = selectedSleeveArr.find((sl) => sl.id === activeSleeveStep2) || selectedSleeveArr[0];
+                if (!currentSleeve) return null;
+                const currentSleeveStock = stockBySleeveAndSize[currentSleeve.id] || {};
+
+                return (
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-[#26302B]">
+                          Stock para: <span className="text-[#3F7D58]">{currentSleeve.name}</span>
+                        </h3>
+                        <p className="text-[11px] text-[#6B7A71]">
+                          Ingresa cuántas piezas entran de cada talla para {currentSleeve.name.toLowerCase()}.
+                        </p>
+                      </div>
+
+                      {/* Botón copiar a otras mangas */}
+                      {selectedSleeveArr.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStockBySleeveAndSize((prev) => {
+                              const next = { ...prev };
+                              const source = next[currentSleeve.id] || {};
+                              selectedSleeveArr.forEach((sl) => {
+                                if (sl.id !== currentSleeve.id) {
+                                  next[sl.id] = { ...source };
+                                }
+                              });
+                              return next;
+                            });
+                          }}
+                          className="text-[11px] font-bold text-[#3F7D58] hover:underline cursor-pointer bg-[#EBF5F0] px-2.5 py-1 rounded-lg border border-[#3F7D58]/20"
+                        >
+                          Copiar cantidades a las demás mangas
+                        </button>
+                      )}
+                    </div>
+
+                    {/* GRID DE TALLAS PARA LA MANGA ACTIVA */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {selectedSizeArr.map((s) => {
+                        const qty = currentSleeveStock[s.id] ?? 0;
+                        return (
+                          <div
+                            key={s.id}
+                            className={`rounded-2xl border-2 p-3 sm:p-4 flex flex-col items-center gap-2 sm:gap-3 transition-all ${qty > 0 ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white"}`}
+                          >
+                            <span className={`text-base sm:text-lg font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                              {s.name}
+                            </span>
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStockBySleeveAndSize((prev) => ({
+                                    ...prev,
+                                    [currentSleeve.id]: {
+                                      ...(prev[currentSleeve.id] || {}),
+                                      [s.id]: Math.max(0, ((prev[currentSleeve.id] || {})[s.id] ?? 0) - 1),
+                                    },
+                                  }))
+                                }
+                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
+                              >
+                                <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              </button>
+                              <input
+                                type="number"
+                                min={0}
+                                value={qty}
+                                onChange={(e) =>
+                                  setStockBySleeveAndSize((prev) => ({
+                                    ...prev,
+                                    [currentSleeve.id]: {
+                                      ...(prev[currentSleeve.id] || {}),
+                                      [s.id]: Math.max(0, Number(e.target.value)),
+                                    },
+                                  }))
+                                }
+                                className={`w-10 sm:w-12 text-center text-base sm:text-lg font-extrabold rounded-xl border py-1 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"}`}
+                              />
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setStockBySleeveAndSize((prev) => ({
+                                    ...prev,
+                                    [currentSleeve.id]: {
+                                      ...(prev[currentSleeve.id] || {}),
+                                      [s.id]: ((prev[currentSleeve.id] || {})[s.id] ?? 0) + 1,
+                                    },
+                                  }))
+                                }
+                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                              </button>
+                            </div>
+                            <span className="text-[10px] text-[#9DAAA2]">
+                              {qty > 0 ? `${qty} pzas` : "Sin stock"}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* Acceso rápido para la manga activa */}
+                    <div className="mt-4 sm:mt-5 flex items-center gap-2 sm:gap-3 flex-wrap">
+                      <p className="text-xs text-[#9DAAA2] font-medium">Acceso rápido ({currentSleeve.name}):</p>
+                      {[2, 5, 10, 15, 20].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => {
+                            const bulk: Record<string, number> = {};
+                            selectedSizeArr.forEach((s) => { bulk[s.id] = n; });
+                            setStockBySleeveAndSize((prev) => ({
+                              ...prev,
+                              [currentSleeve.id]: bulk,
+                            }));
+                          }}
+                          className="px-2.5 py-1 rounded-lg border border-[#DDD9D0] bg-white text-xs font-bold text-[#556B5D] hover:border-[#3F7D58] hover:bg-[#F0F4F1] transition-all cursor-pointer shadow-xs"
+                        >
+                          +{n} a todas
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setStockBySleeveAndSize((prev) => ({
+                            ...prev,
+                            [currentSleeve.id]: {},
+                          }))
+                        }
+                        className="px-2.5 py-1 rounded-lg text-xs font-bold text-[#B85450] hover:underline cursor-pointer"
+                      >
+                        Limpiar {currentSleeve.name}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Resumen del stock total de todas las mangas */}
+              {(() => {
+                let totalPieces = 0;
+                const details: { name: string; total: number }[] = [];
+                selectedSleeveArr.forEach((sl) => {
+                  const slTotal = Object.values(stockBySleeveAndSize[sl.id] || {}).reduce((a, b) => a + b, 0);
+                  details.push({ name: sl.name, total: slTotal });
+                  totalPieces += slTotal;
+                });
+
+                const grandTotal = totalPieces * selectedColors.size;
+
+                if (totalPieces === 0) return null;
+
+                return (
+                  <div className="mt-4 p-3.5 bg-[#EBF5F0] rounded-xl border border-[#3F7D58]/25 text-xs text-[#26302B] font-bold flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Package className="w-4 h-4 text-[#3F7D58] shrink-0" />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {details.map((d) => (
+                          <span key={d.name} className="px-2 py-0.5 bg-white rounded-md border border-[#3F7D58]/20 text-[#3F7D58]">
+                            {d.name}: <strong>{d.total} pzas</strong>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="text-right text-[#3F7D58]">
+                      Total General: <strong>{grandTotal} prendas</strong> ({selectedColors.size} color{selectedColors.size > 1 ? "es" : ""})
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* FOOTER PASO 2 */}
