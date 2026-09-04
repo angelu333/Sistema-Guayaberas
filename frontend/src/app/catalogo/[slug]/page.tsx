@@ -61,22 +61,50 @@ function PublicCatalogContent({ slug }: { slug: string }) {
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const tenant = await publicCatalogService.getPublicTenantBySlug(slug);
-    if (!tenant) { setLoading(false); return; }
-    setTenantInfo(tenant);
+    const bundle = await publicCatalogService.getPublicBundleBySlug(slug);
+    if (!bundle || !bundle.tenant) {
+      setLoading(false);
+      return;
+    }
+    setTenantInfo(bundle.tenant);
+    setFilterOptions(bundle.filterOptions);
 
-    const [options, catalog] = await Promise.all([
-      publicCatalogService.getPublicFilterOptions(tenant.id),
-      publicCatalogService.getPublicCatalog(tenant.id, {
-        modelo: selectedModelo || undefined,
-        manga: selectedManga || undefined,
-        talla: selectedTalla || undefined,
-        color: selectedColor || undefined,
-      }),
-    ]);
-    setFilterOptions(options);
-    setVariants(catalog);
-    setGroupedProducts(publicCatalogService.groupProductsForCatalog(catalog));
+    let filtered = bundle.catalog || [];
+    if (selectedModelo) {
+      const m = selectedModelo.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.productId.toLowerCase() === m ||
+          (item.product?.name || "").toLowerCase().includes(m)
+      );
+    }
+    if (selectedManga) {
+      const sl = selectedManga.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.sleeveTypeId?.toLowerCase() === sl ||
+          (item.sleeveType?.name || "").toLowerCase().includes(sl)
+      );
+    }
+    if (selectedTalla) {
+      const t = selectedTalla.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.sizeId?.toLowerCase() === t ||
+          (item.size?.name || "").toLowerCase() === t
+      );
+    }
+    if (selectedColor) {
+      const c = selectedColor.toLowerCase();
+      filtered = filtered.filter(
+        (item) =>
+          item.colorId?.toLowerCase() === c ||
+          (item.color?.name || "").toLowerCase().includes(c)
+      );
+    }
+
+    setVariants(filtered);
+    setGroupedProducts(publicCatalogService.groupProductsForCatalog(filtered));
     setLoading(false);
   }, [slug, selectedModelo, selectedManga, selectedTalla, selectedColor]);
 

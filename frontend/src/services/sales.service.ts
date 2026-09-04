@@ -216,6 +216,8 @@ export const salesService = {
     tenantId: string,
     limit: number = 50
   ): Promise<SaleRecord[]> {
+    if (!tenantId) return [];
+
     const { data, error } = await supabase
       .from("ventas")
       .select(`
@@ -232,7 +234,7 @@ export const salesService = {
         notes,
         created_at,
         clientes(full_name),
-        user_profiles!seller_id(full_name),
+        seller:user_profiles!seller_id(full_name),
         ubicaciones(id, name),
         detalle_ventas(
           id,
@@ -259,7 +261,9 @@ export const salesService = {
       .limit(limit);
 
     if (error) {
-      console.error("Error al obtener historial de ventas:", error);
+      if (error.message) {
+        console.warn("Aviso al obtener historial de ventas:", error.message);
+      }
       return [];
     }
 
@@ -269,7 +273,7 @@ export const salesService = {
       ticketNumber: row.ticket_number,
       clientId: row.client_id,
       clientName: row.clientes?.full_name || null,
-      sellerName: row.user_profiles?.full_name || null,
+      sellerName: row.seller?.full_name || row.user_profiles?.full_name || null,
       locationId: row.location_id || null,
       locationName: row.ubicaciones?.name || null,
       subtotal: Number(row.subtotal),

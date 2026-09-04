@@ -52,6 +52,49 @@ export interface RegisterMovementParams {
 
 export const inventoryService = {
   /**
+   * Carga todo el lote de inventario (existencias, movimientos, alertas, sucursales)
+   * en una sola llamada de servidor de alto rendimiento.
+   */
+  async getInventoryBundle(
+    tenantId: string,
+    locationId?: string
+  ): Promise<{
+    stockItems: StockItemView[];
+    movements: InventoryMovementRecord[];
+    alerts: StockAlert[];
+    locations: Location[];
+  }> {
+    if (typeof window !== "undefined") {
+      try {
+        const url = locationId
+          ? `/api/inventory?tenantId=${tenantId}&locationId=${locationId}`
+          : `/api/inventory?tenantId=${tenantId}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          return data;
+        }
+      } catch (err) {
+        console.warn("Fallo al consultar /api/inventory, usando fallback:", err);
+      }
+    }
+
+    const [items, movs, alts, locs] = await Promise.all([
+      this.getStockByLocation(tenantId, locationId),
+      this.getMovementHistory(tenantId, 100),
+      this.getStockAlerts(tenantId, locationId),
+      this.getLocations(tenantId),
+    ]);
+
+    return {
+      stockItems: items,
+      movements: movs,
+      alerts: alts,
+      locations: locs,
+    };
+  },
+
+  /**
    * Obtiene la lista de ubicaciones activas del tenant (bodegas/tiendas).
    * Si el tenant no tiene ninguna creada aun, crea automaticamente "Bodega Principal".
    */
@@ -69,7 +112,7 @@ export const inventoryService = {
     }
 
     if (data && data.length > 0) {
-      return data.map((row) => ({
+      return data.map((row: any) => ({
         id: row.id,
         tenantId: row.tenant_id,
         name: row.name,
@@ -108,7 +151,7 @@ export const inventoryService = {
    * Obtiene TODAS las variantes del tenant para el modal de ajuste (incluso con stock 0)
    */
   async getAllVariantsForAdjustment(tenantId: string): Promise<StockItemView[]> {
-    const { data, error } = await supabase
+    const { data: variants, error } = await supabase
       .from("variantes_producto")
       .select(`
         id,
@@ -121,27 +164,30 @@ export const inventoryService = {
         ),
         colores(name),
         tallas(name),
-        tipos_manga(name),
-        existencias(
-          quantity,
-          location_id,
-          ubicaciones(name)
-        )
+        tipos_manga(name)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
-    if (error) {
+    if (error || !variants) {
       console.error("Error al obtener variantes para ajuste:", error);
       return [];
     }
 
-    return (data || []).map((v: any) => {
+    const vIds = variants.map((v: any) => v.id);
+    const { data: stockData } = vIds.length > 0
+      ? await supabase.from("existencias").select("variant_id, quantity, location_id, ubicaciones(name)").in("variant_id", vIds)
+      : { data: [] };
+
+    const stockMap = new Map<string, number>();
+    (stockData || []).forEach((st: any) => {
+      const curr = stockMap.get(st.variant_id) || 0;
+      stockMap.set(st.variant_id, curr + (st.quantity || 0));
+    });
+
+    return (variants || []).map((v: any) => {
       const p = v.productos;
-      const totalStock = (v.existencias || []).reduce(
-        (acc: number, curr: any) => acc + (curr.quantity || 0),
-        0
-      );
+      const totalStock = stockMap.get(v.id) || 0;
       return {
         id: v.id,
         variantId: v.id,
@@ -184,28 +230,43 @@ export const inventoryService = {
         ),
         colores(name),
         tallas(name),
-        tipos_manga(name),
-        existencias(
-          id,
-          quantity,
-          location_id,
-          updated_at,
-          ubicaciones(name)
-        )
+        tipos_manga(name)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
-    if (varError) {
+    if (varError || !variants) {
       console.error("Error al obtener variantes para inventario:", varError);
       return [];
     }
+
+    const vIds = variants.map((v: any) => v.id);
+    let stockQuery = supabase.from("existencias").select(`
+      id,
+      variant_id,
+      quantity,
+      location_id,
+      updated_at,
+      ubicaciones(name)
+    `).in("variant_id", vIds);
+
+    if (locationId) {
+      stockQuery = stockQuery.eq("location_id", locationId);
+    }
+
+    const { data: stockData } = vIds.length > 0 ? await stockQuery : { data: [] };
+
+    const existenciasMap = new Map<string, any[]>();
+    (stockData || []).forEach((st: any) => {
+      if (!existenciasMap.has(st.variant_id)) existenciasMap.set(st.variant_id, []);
+      existenciasMap.get(st.variant_id)!.push(st);
+    });
 
     const result: StockItemView[] = [];
 
     (variants || []).forEach((v: any) => {
       const p = v.productos;
-      const existenciasList = v.existencias || [];
+      const existenciasList = existenciasMap.get(v.id) || [];
 
       if (existenciasList.length === 0) {
         // Variante sin existencias registradas todavía -> mostrar con cantidad 0
@@ -218,7 +279,7 @@ export const inventoryService = {
           colorName: v.colores?.name || null,
           sizeName: v.tallas?.name || null,
           sleeveTypeName: v.tipos_manga?.name || null,
-          locationId: "",
+          locationId: locationId || "",
           locationName: "Bodega Principal",
           quantity: 0,
           minStock: v.min_stock || 5,
@@ -348,7 +409,7 @@ export const inventoryService = {
    * Si se provee locationId, evalúa el stock exclusivamente de esa sucursal.
    */
   async getStockAlerts(tenantId: string, locationId?: string): Promise<StockAlert[]> {
-    const { data, error } = await supabase
+    const { data: variants, error } = await supabase
       .from("variantes_producto")
       .select(`
         id,
@@ -356,27 +417,33 @@ export const inventoryService = {
         min_stock,
         productos!inner(name),
         colores(name),
-        tallas(name),
-        existencias(quantity, location_id)
+        tallas(name)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
-    if (error) {
+    if (error || !variants) {
       console.error("Error al obtener alertas de stock:", error);
       return [];
     }
 
+    const vIds = variants.map((v: any) => v.id);
+    let stockQuery = supabase.from("existencias").select("variant_id, quantity, location_id").in("variant_id", vIds);
+    if (locationId) {
+      stockQuery = stockQuery.eq("location_id", locationId);
+    }
+    const { data: stockData } = vIds.length > 0 ? await stockQuery : { data: [] };
+
+    const stockMap = new Map<string, number>();
+    (stockData || []).forEach((st: any) => {
+      const curr = stockMap.get(st.variant_id) || 0;
+      stockMap.set(st.variant_id, curr + (st.quantity || 0));
+    });
+
     const alerts: StockAlert[] = [];
 
-    (data || []).forEach((v: any) => {
-      const filteredExistencias = (v.existencias || []).filter((ex: any) =>
-        locationId ? ex.location_id === locationId : true
-      );
-      const totalStock = filteredExistencias.reduce(
-        (acc: number, curr: any) => acc + (curr.quantity || 0),
-        0
-      );
+    (variants || []).forEach((v: any) => {
+      const totalStock = stockMap.get(v.id) || 0;
       const minStock = v.min_stock || 5;
 
       if (totalStock <= minStock) {

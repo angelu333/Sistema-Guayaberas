@@ -182,21 +182,24 @@ export const dashboardService = {
     });
 
     // Inventario y valuación — si hay locationId, solo las existencias de esa sucursal
-    const existenciasSelect = locationId
-      ? `existencias!inner(quantity, location_id)`
-      : `existencias(quantity, location_id)`;
-
-    let variantsQuery = supabase
+    const { data: variantsData } = await supabase
       .from("variantes_producto")
-      .select(`id, sale_price, cost_price, min_stock, ${existenciasSelect}`)
+      .select("id, sale_price, cost_price, min_stock")
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
+    const vIds = (variantsData || []).map((v: any) => v.id);
+    let stockQuery = supabase.from("existencias").select("variant_id, quantity, location_id").in("variant_id", vIds);
     if (locationId) {
-      variantsQuery = variantsQuery.eq("existencias.location_id", locationId);
+      stockQuery = stockQuery.eq("location_id", locationId);
     }
+    const { data: stockData } = vIds.length > 0 ? await stockQuery : { data: [] };
 
-    const { data: variantsData } = await variantsQuery;
+    const stockMap = new Map<string, number>();
+    (stockData || []).forEach((st: any) => {
+      const curr = stockMap.get(st.variant_id) || 0;
+      stockMap.set(st.variant_id, curr + (st.quantity || 0));
+    });
 
     let totalInventoryUnits = 0;
     let totalInventoryValue = 0;
@@ -205,7 +208,7 @@ export const dashboardService = {
     let outOfStockCount = 0;
 
     (variantsData || []).forEach((v: any) => {
-      const stock = (v.existencias || []).reduce((acc: number, curr: any) => acc + (curr.quantity || 0), 0);
+      const stock = stockMap.get(v.id) || 0;
       const min = v.min_stock || 5;
       const saleP = Number(v.sale_price || 0);
       const costP = Number(v.cost_price || 0);

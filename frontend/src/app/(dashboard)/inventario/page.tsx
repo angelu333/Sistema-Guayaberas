@@ -135,25 +135,20 @@ function InventarioYProductosContent() {
       // Determinar ubicación activa: para seller es la suya, para admin es la seleccionada o undefined (todas)
       const activeLocId = isSeller ? sellerLocationId : (selectedLocationId || undefined);
 
-      const [itemsData, movementsData, alertsData, locsData] = await Promise.all([
-        inventoryService.getStockByLocation(effectiveTenantId, activeLocId),
-        inventoryService.getMovementHistory(effectiveTenantId, 100),
-        inventoryService.getStockAlerts(effectiveTenantId, activeLocId),
-        isAdmin && locations.length === 0 ? inventoryService.getLocations(effectiveTenantId) : Promise.resolve(locations),
-      ]);
+      const bundle = await inventoryService.getInventoryBundle(effectiveTenantId, activeLocId);
 
-      setStockItems(itemsData);
-      setMovements(movementsData);
-      setAlerts(alertsData);
-      if (locsData && locsData.length > 0 && locations.length === 0) {
-        setLocations(locsData);
+      setStockItems(bundle.stockItems);
+      setMovements(bundle.movements);
+      setAlerts(bundle.alerts);
+      if (bundle.locations && bundle.locations.length > 0) {
+        setLocations(bundle.locations);
       }
     } catch (err) {
       console.error("Error al cargar datos de inventario:", err);
     } finally {
       setLoadingInventory(false);
     }
-  }, [effectiveTenantId, isSeller, sellerLocationId, selectedLocationId, isAdmin, locations]);
+  }, [effectiveTenantId, isSeller, sellerLocationId, selectedLocationId]);
 
   const loadProductsData = useCallback(async () => {
     if (!effectiveTenantId) return;
@@ -173,6 +168,7 @@ function InventarioYProductosContent() {
       setLoadingProducts(false);
     }
   }, [effectiveTenantId]);
+
   useEffect(() => {
     loadInventoryData();
     loadProductsData();

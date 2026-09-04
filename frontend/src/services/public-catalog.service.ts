@@ -59,24 +59,65 @@ export interface PublicProductView {
 
 export const publicCatalogService = {
   /**
-   * Obtiene la informacion publica de la empresa por su slug
+   * Carga la información completa del catálogo público (empresa, filtros, catálogo)
+   * en una sola llamada de alto rendimiento sin sobrecarga de RLS.
+   */
+  async getPublicBundleBySlug(slug: string): Promise<{
+    tenant: PublicTenantInfo | null;
+    filterOptions: PublicFilterOptions;
+    catalog: ProductVariant[];
+  } | null> {
+    if (typeof window !== "undefined") {
+      try {
+        const res = await fetch(`/api/public-catalog?slug=${encodeURIComponent(slug)}`, {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data;
+        }
+      } catch (err) {
+        console.warn("Fallo al consultar /api/public-catalog, usando fallback:", err);
+      }
+    }
+
+    const tenant = await this.getPublicTenantBySlug(slug);
+    if (!tenant) return null;
+
+    const [options, catalog] = await Promise.all([
+      this.getPublicFilterOptions(tenant.id),
+      this.getPublicCatalog(tenant.id),
+    ]);
+
+    return {
+      tenant,
+      filterOptions: options,
+      catalog,
+    };
+  },
+
+  /**
+   * Obtiene la información pública de la empresa por su slug
    */
   async getPublicTenantBySlug(slug: string): Promise<PublicTenantInfo | null> {
+    const rawSlug = decodeURIComponent(slug || "").trim();
+    const cleanSlugWithoutPrefix = rawSlug.replace(/^guayaberas-?/i, "");
+
     // 1. Búsqueda exacta por slug
-    let { data, error } = await supabase
+    let { data } = await supabase
       .from("tenants")
       .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
-      .eq("slug", slug)
+      .or(`slug.eq.${rawSlug},slug.eq.${cleanSlugWithoutPrefix}`)
       .eq("is_active", true)
       .maybeSingle();
 
     // 2. Si no encuentra por slug exacto, buscar por coincidencia en nombre
     if (!data) {
-      const cleanSlug = slug.replace(/-/g, " ");
+      const searchName = cleanSlugWithoutPrefix.replace(/-/g, " ").replace(/&/g, "").trim();
       const { data: fallbackData } = await supabase
         .from("tenants")
         .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
-        .ilike("name", `%${cleanSlug}%`)
+        .ilike("name", `%${searchName}%`)
         .eq("is_active", true)
         .limit(1)
         .maybeSingle();
@@ -117,7 +158,7 @@ export const publicCatalogService = {
    * Obtiene TODAS las opciones de Modelo, Talla, Color y Tipo de Manga que existen en la BD
    */
   async getPublicFilterOptions(tenantId: string): Promise<PublicFilterOptions> {
-    const [prodsRes, colorsRes, sizesRes, sleevesRes, variantsRes] = await Promise.all([
+    const [prodsRes, colorsRes, sizesRes, sleevesRes] = await Promise.all([
       supabase
         .from("productos")
         .select("id, name")
@@ -142,57 +183,12 @@ export const publicCatalogService = {
         .or(`tenant_id.eq.${tenantId},tenant_id.is.null`)
         .eq("is_active", true)
         .order("name"),
-      supabase
-        .from("variantes_producto")
-        .select(`
-          productos(id, name),
-          colores(id, name, hex_code),
-          tallas(id, name, sort_order),
-          tipos_manga(id, name)
-        `)
-        .eq("tenant_id", tenantId)
-        .eq("is_active", true),
     ]);
 
-    const modelosMap = new Map<string, { id: string; name: string }>();
-    (prodsRes.data || []).forEach((p: any) => modelosMap.set(p.id, { id: p.id, name: p.name }));
-
-    const coloresMap = new Map<string, { id: string; name: string; hexCode: string | null }>();
-    (colorsRes.data || []).forEach((c: any) => coloresMap.set(c.id, { id: c.id, name: c.name, hexCode: c.hex_code }));
-
-    const tallasMap = new Map<string, { id: string; name: string; sortOrder: number }>();
-    (sizesRes.data || []).forEach((s: any) => tallasMap.set(s.id, { id: s.id, name: s.name, sortOrder: s.sort_order || 0 }));
-
-    const mangasMap = new Map<string, { id: string; name: string }>();
-    (sleevesRes.data || []).forEach((sl: any) => mangasMap.set(sl.id, { id: sl.id, name: sl.name }));
-
-    // Consolidar también todo lo que venga en las variantes del tenant
-    (variantsRes.data || []).forEach((v: any) => {
-      if (v.productos?.id && v.productos?.name) {
-        modelosMap.set(v.productos.id, { id: v.productos.id, name: v.productos.name });
-      }
-      if (v.colores?.id && v.colores?.name) {
-        coloresMap.set(v.colores.id, { id: v.colores.id, name: v.colores.name, hexCode: v.colores.hex_code || null });
-      }
-      if (v.tallas?.id && v.tallas?.name) {
-        tallasMap.set(v.tallas.id, { id: v.tallas.id, name: v.tallas.name, sortOrder: v.tallas.sort_order || 0 });
-      }
-      if (v.tipos_manga?.id && v.tipos_manga?.name) {
-        mangasMap.set(v.tipos_manga.id, { id: v.tipos_manga.id, name: v.tipos_manga.name });
-      }
-    });
-
-    const modelos = Array.from(modelosMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const colores = Array.from(coloresMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    const tallas = Array.from(tallasMap.values()).sort((a, b) => {
-      const numA = parseFloat(a.name);
-      const numB = parseFloat(b.name);
-      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
-      if (!isNaN(numA)) return -1;
-      if (!isNaN(numB)) return 1;
-      return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, undefined, { numeric: true });
-    });
-    const mangas = Array.from(mangasMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const modelos = (prodsRes.data || []).map((p: any) => ({ id: p.id, name: p.name }));
+    const colores = (colorsRes.data || []).map((c: any) => ({ id: c.id, name: c.name, hexCode: c.hex_code }));
+    const tallas = (sizesRes.data || []).map((s: any) => ({ id: s.id, name: s.name, sortOrder: s.sort_order || 0 }));
+    const mangas = (sleevesRes.data || []).map((sl: any) => ({ id: sl.id, name: sl.name }));
 
     return { modelos, colores, tallas, mangas };
   },
@@ -219,13 +215,11 @@ export const publicCatalogService = {
           description, 
           image_url,
           is_active, 
-          categorias(id, name),
-          imagenes_producto(id, url, sort_order, is_primary)
+          categorias(id, name)
         ),
         colores(id, name, hex_code),
         tallas(id, name, sort_order),
-        tipos_manga(id, name),
-        existencias(quantity)
+        tipos_manga(id, name)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true)
@@ -236,18 +230,45 @@ export const publicCatalogService = {
       return [];
     }
 
-    let mapped: ProductVariant[] = data.map((v: any) => {
-      const totalStock = (v.existencias || []).reduce(
-        (acc: number, ex: any) => acc + (ex.quantity || 0),
-        0
-      );
+    const vIds = (data || []).map((v: any) => v.id);
 
-      const pImages = (v.productos?.imagenes_producto || []).map((img: any) => ({
+    // Consultar imágenes de variantes y existencias en ráfaga paralela en lote
+    const [varImgsRes, stockRes] = await Promise.all([
+      vIds.length > 0
+        ? supabase.from("imagenes_variante").select("id, variant_id, url, sort_order, is_primary").in("variant_id", vIds)
+        : Promise.resolve({ data: [] }),
+      vIds.length > 0
+        ? supabase.from("existencias").select("variant_id, quantity").in("variant_id", vIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const varImgsMap = new Map<string, any[]>();
+    (varImgsRes.data || []).forEach((img: any) => {
+      if (!varImgsMap.has(img.variant_id)) varImgsMap.set(img.variant_id, []);
+      varImgsMap.get(img.variant_id)!.push(img);
+    });
+
+    const stockMap = new Map<string, number>();
+    (stockRes.data || []).forEach((st: any) => {
+      const curr = stockMap.get(st.variant_id) || 0;
+      stockMap.set(st.variant_id, curr + (st.quantity || 0));
+    });
+
+    let mapped: ProductVariant[] = data.map((v: any) => {
+      const totalStock = stockMap.get(v.id) || 0;
+
+      const pImages = v.productos?.image_url
+        ? [{ id: "primary", url: v.productos.image_url, sortOrder: 1, isPrimary: true }]
+        : [];
+
+      const varImages = (varImgsMap.get(v.id) || []).map((img: any) => ({
         id: img.id,
         url: img.url,
         sortOrder: img.sort_order,
         isPrimary: img.is_primary,
       }));
+
+      const vImages = varImages.length > 0 ? varImages : pImages;
 
       return {
         id: v.id,
@@ -277,7 +298,7 @@ export const publicCatalogService = {
         salePrice: Number(v.sale_price || 0),
         minStock: v.min_stock || 0,
         isActive: v.is_active,
-        images: pImages,
+        images: vImages,
         totalStock,
       };
     });

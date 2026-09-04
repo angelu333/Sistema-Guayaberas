@@ -91,28 +91,39 @@ export const reportsService = {
    * Obtiene el reporte de inventario valorizado con costo, venta y margen de ganancia proyectada
    */
   async getInventoryValuationReport(tenantId: string): Promise<InventoryValuationRow[]> {
-    const { data, error } = await supabase
+    const { data: variants, error } = await supabase
       .from("variantes_producto")
       .select(`
+        id,
         sku,
         cost_price,
         sale_price,
         productos!inner(name, categorias(name)),
         colores(name),
         tallas(name),
-        tipos_manga(name),
-        existencias(quantity)
+        tipos_manga(name)
       `)
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
-    if (error || !data) {
+    if (error || !variants) {
       console.error("Error al obtener reporte de valuacion:", error?.message || error);
       return [];
     }
 
-    return data.map((v: any) => {
-      const stock = (v.existencias || []).reduce((acc: number, e: any) => acc + (e.quantity || 0), 0);
+    const vIds = variants.map((v: any) => v.id);
+    const { data: stockData } = vIds.length > 0
+      ? await supabase.from("existencias").select("variant_id, quantity").in("variant_id", vIds)
+      : { data: [] };
+
+    const stockMap = new Map<string, number>();
+    (stockData || []).forEach((st: any) => {
+      const curr = stockMap.get(st.variant_id) || 0;
+      stockMap.set(st.variant_id, curr + (st.quantity || 0));
+    });
+
+    return variants.map((v: any) => {
+      const stock = stockMap.get(v.id) || 0;
       const costP = Number(v.cost_price || 0);
       const saleP = Number(v.sale_price || 0);
       const totalCostValue = stock * costP;

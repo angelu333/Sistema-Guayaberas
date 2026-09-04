@@ -29,6 +29,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useCartStore } from "@/stores/cart.store";
 import { salesService } from "@/services/sales.service";
 import { clientsService } from "@/services/clients.service";
+import { productsService } from "@/services/products.service";
 import type { ProductVariant, PaymentMethod, Client } from "@/types/domain.types";
 import { createClient } from "@/lib/supabase/client";
 import { POSVariantSelectModal, type GroupedPOSProduct } from "@/components/pos/POSVariantSelectModal";
@@ -77,37 +78,23 @@ export default function POSPage() {
   const loadVariants = useCallback(async () => {
     if (!effectiveTenantId) return;
     setLoadingVariants(true);
-    const { data, error } = await supabase
-      .from("variantes_producto")
-      .select(`
-        id,
-        sku,
-        sale_price,
-        cost_price,
-        min_stock,
-        is_active,
-        productos(id, name, image_url, categorias(name)),
-        colores(id, name, hex_code),
-        tallas(id, name, sort_order),
-        tipos_manga(id, name),
-        existencias(quantity, location_id)
-      `)
-      .eq("tenant_id", effectiveTenantId)
-      .eq("is_active", true);
+    try {
+      const data = await productsService.getProducts({
+        tenantId: effectiveTenantId,
+        isActive: true,
+      });
 
-    if (!error && data) {
       const userLocationId = session?.locationId || null;
 
-      const mapped: ProductVariant[] = data.map((v: any) => {
+      const mapped: ProductVariant[] = (data || []).map((v: any) => {
         let localStock = 0;
         let otherStock = 0;
-        let totalStock = 0;
+        let totalStock = v.totalStock || 0;
 
-        (v.existencias || []).forEach((ex: any) => {
-          const qty = ex.quantity || 0;
-          totalStock += qty;
+        (v.stockByLocation || []).forEach((st: any) => {
+          const qty = st.quantity || 0;
           if (userLocationId) {
-            if (ex.location_id === userLocationId) {
+            if (st.locationId === userLocationId) {
               localStock += qty;
             } else {
               otherStock += qty;
@@ -118,43 +105,18 @@ export default function POSPage() {
         });
 
         return {
-          id: v.id,
-          tenantId: effectiveTenantId,
-          productId: v.productos?.id || "",
-          product: {
-            id: v.productos?.id || "",
-            tenantId: effectiveTenantId,
-            name: v.productos?.name || "",
-            description: null,
-            categoryId: null,
-            imageUrl: v.productos?.image_url || null,
-            category: v.productos?.categorias
-              ? { id: "", tenantId: effectiveTenantId, name: v.productos.categorias.name, isActive: true }
-              : null,
-            isActive: true,
-            createdAt: "",
-            updatedAt: "",
-          },
-          colorId: v.colores?.id || null,
-          color: v.colores ? { id: v.colores.id, tenantId: effectiveTenantId, name: v.colores.name, hexCode: v.colores.hex_code, isActive: true } : null,
-          sizeId: v.tallas?.id || null,
-          size: v.tallas ? { id: v.tallas.id, tenantId: effectiveTenantId, name: v.tallas.name, sortOrder: v.tallas.sort_order, isActive: true } : null,
-          sleeveTypeId: v.tipos_manga?.id || null,
-          sleeveType: v.tipos_manga ? { id: v.tipos_manga.id, tenantId: effectiveTenantId, name: v.tipos_manga.name, isActive: true } : null,
-          sku: v.sku,
-          costPrice: Number(v.cost_price || 0),
-          salePrice: Number(v.sale_price || 0),
-          minStock: v.min_stock || 0,
-          isActive: v.is_active,
-          images: [],
-          totalStock,
-          localStock,
+          ...v,
+          localStock: userLocationId ? localStock : totalStock,
           otherStock,
-        } as any;
+        };
       });
+
       setVariants(mapped);
+    } catch (err) {
+      console.error("Error al cargar variantes en POS:", err);
+    } finally {
+      setLoadingVariants(false);
     }
-    setLoadingVariants(false);
   }, [effectiveTenantId, session?.locationId]);
 
   const loadClients = useCallback(async () => {

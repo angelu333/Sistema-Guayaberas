@@ -53,7 +53,7 @@ export const locationsService = {
 
     // Obtener stock total por ubicación
     if (locations.length > 0) {
-      const locationIds = locations.map((l) => l.id);
+      const locationIds = locations.map((l: any) => l.id);
       const { data: stockData } = await supabase
         .from("existencias")
         .select("location_id, quantity")
@@ -65,7 +65,7 @@ export const locationsService = {
           stockMap.set(s.location_id, (stockMap.get(s.location_id) || 0) + s.quantity);
         });
 
-        return locations.map((loc) => ({
+        return locations.map((loc: any) => ({
           ...loc,
           totalStock: stockMap.get(loc.id) || 0,
         }));

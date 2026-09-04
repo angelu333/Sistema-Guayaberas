@@ -43,6 +43,28 @@ export const productsService = {
    * Obtiene todos los productos del tenant activo con sus variantes
    */
   async getProducts(filters?: ProductFilters): Promise<ProductVariant[]> {
+    if (typeof window !== "undefined" && filters?.tenantId) {
+      try {
+        const params = new URLSearchParams();
+        params.append("tenantId", filters.tenantId);
+        if (filters.isActive !== undefined) params.append("isActive", String(filters.isActive));
+        if (filters.categoryId) params.append("categoryId", filters.categoryId);
+        if (filters.colorId) params.append("colorId", filters.colorId);
+        if (filters.sizeId) params.append("sizeId", filters.sizeId);
+        if (filters.search) params.append("search", filters.search);
+
+        const res = await fetch(`/api/products?${params.toString()}`, {
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          return data;
+        }
+      } catch (err) {
+        console.warn("Fallo al consultar /api/products, usando fallback directo:", err);
+      }
+    }
+
     const supabase = createClient();
 
     let query = supabase
@@ -68,13 +90,11 @@ export const productsService = {
           category_id, 
           image_url,
           is_active, 
-          category:categorias(id, name),
-          images:imagenes_producto(id, url, sort_order, is_primary)
+          category:categorias(id, name)
         ),
         color:colores(id, name, hex_code),
         size:tallas(id, name, sort_order),
-        sleeveType:tipos_manga(id, name),
-        images:imagenes_variante(id, url, sort_order, is_primary)
+        sleeveType:tipos_manga(id, name)
       `)
       .order("created_at", { ascending: false });
 
@@ -100,6 +120,36 @@ export const productsService = {
       throw new Error(`Error al obtener los productos: ${error.message}`);
     }
 
+    const rawVariantIds = (data || []).map((item: any) => item.id);
+
+    // Ráfaga paralela ultra rápida en lote para imágenes de variante y existencias por sucursal
+    const [varImgsRes, stockRes] = await Promise.all([
+      rawVariantIds.length > 0
+        ? supabase.from("imagenes_variante").select("id, variant_id, url, sort_order, is_primary").in("variant_id", rawVariantIds)
+        : Promise.resolve({ data: [] }),
+      rawVariantIds.length > 0
+        ? supabase.from("existencias").select("variant_id, location_id, quantity, ubicaciones(name)").in("variant_id", rawVariantIds)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const varImgsMap = new Map<string, any[]>();
+    (varImgsRes.data || []).forEach((img: any) => {
+      if (!varImgsMap.has(img.variant_id)) varImgsMap.set(img.variant_id, []);
+      varImgsMap.get(img.variant_id)!.push(img);
+    });
+
+    const stockMap = new Map<string, { total: number; locations: any[] }>();
+    (stockRes.data || []).forEach((s: any) => {
+      const current = stockMap.get(s.variant_id) || { total: 0, locations: [] };
+      current.total += s.quantity;
+      current.locations.push({
+        locationId: s.location_id,
+        locationName: s.ubicaciones?.name || "Ubicación",
+        quantity: s.quantity,
+      });
+      stockMap.set(s.variant_id, current);
+    });
+
     let variants: ProductVariant[] = (data || []).map((item: any) => ({
       id: item.id,
       tenantId: item.tenant_id,
@@ -111,13 +161,9 @@ export const productsService = {
         description: item.product.description,
         categoryId: item.product.category_id,
         imageUrl: item.product.image_url || null,
-        images: (item.product.images || []).map((img: any) => ({
-          id: img.id,
-          productId: item.product.id,
-          url: img.url,
-          sortOrder: img.sort_order,
-          isPrimary: img.is_primary,
-        })),
+        images: item.product.image_url
+          ? [{ id: "primary", url: item.product.image_url, sortOrder: 1, isPrimary: true }]
+          : [],
         category: item.product.category ? {
           id: item.product.category.id,
           tenantId: item.tenant_id,
@@ -156,44 +202,16 @@ export const productsService = {
       salePrice: Number(item.sale_price),
       minStock: item.min_stock,
       isActive: item.is_active,
-      images: (item.images || []).map((img: any) => ({
+      images: (varImgsMap.get(item.id) || []).map((img: any) => ({
         id: img.id,
         variantId: item.id,
         url: img.url,
         sortOrder: img.sort_order,
         isPrimary: img.is_primary,
       })),
+      totalStock: stockMap.get(item.id)?.total ?? 0,
+      stockByLocation: stockMap.get(item.id)?.locations ?? [],
     }));
-
-    // Obtener existencias actuales agrupadas por variante
-    const variantIds = variants.map((v) => v.id);
-    if (variantIds.length > 0) {
-      const { data: stockData } = await supabase
-        .from("existencias")
-        .select("variant_id, location_id, quantity, ubicaciones(name)")
-        .in("variant_id", variantIds);
-
-      if (stockData) {
-        const stockMap = new Map<string, { total: number; locations: any[] }>();
-
-        stockData.forEach((s: any) => {
-          const current = stockMap.get(s.variant_id) || { total: 0, locations: [] };
-          current.total += s.quantity;
-          current.locations.push({
-            locationId: s.location_id,
-            locationName: s.ubicaciones?.name || "Ubicación",
-            quantity: s.quantity,
-          });
-          stockMap.set(s.variant_id, current);
-        });
-
-        variants = variants.map((v) => ({
-          ...v,
-          totalStock: stockMap.get(v.id)?.total ?? 0,
-          stockByLocation: stockMap.get(v.id)?.locations ?? [],
-        }));
-      }
-    }
 
     // Filtro por categoria si se provee
     if (filters?.categoryId) {
@@ -316,7 +334,7 @@ export const productsService = {
               user_id: null,
             } as MovRow;
           })
-          .filter((v): v is MovRow => v !== null);
+          .filter((v: any): v is MovRow => v !== null);
 
         if (movimientosRows.length > 0) {
           const { error: movErr } = await supabase
