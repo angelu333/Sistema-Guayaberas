@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo, use } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 import {
   Phone,
   MapPin,
@@ -18,7 +19,9 @@ import {
   Check,
   Copy,
   Link2,
+  ArrowLeft,
 } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   publicCatalogService,
   type PublicTenantInfo,
@@ -34,6 +37,7 @@ function PublicCatalogContent({ slug }: { slug: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+  const { session } = useAuthStore();
 
   const [tenantInfo, setTenantInfo] = useState<PublicTenantInfo | null>(null);
   const [filterOptions, setFilterOptions] = useState<PublicFilterOptions>({
@@ -194,10 +198,10 @@ function PublicCatalogContent({ slug }: { slug: string }) {
     <div className="min-h-screen flex flex-col pb-20" style={{ backgroundColor: "#FAF7F2", fontFamily: "'Outfit', sans-serif" }}>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-          FRANJA DE ANUNCIO SUPERIOR
+          FRANJA DE ANUNCIO SUPERIOR PERSONALIZABLE
       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div style={{ backgroundColor: "#C49A5A" }} className="text-white text-[11px] text-center py-1.5 px-4 font-semibold tracking-wider uppercase">
-        Confección Artesanal Yucateca · Mérida, México
+        {tenantInfo?.bannerText?.trim() || "Confección Artesanal Yucateca · Mérida, México"}
       </div>
 
       {/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -245,8 +249,21 @@ function PublicCatalogContent({ slug }: { slug: string }) {
             </div>
           </div>
 
-          {/* Botones de Compartir y Copiar Enlace */}
+          {/* Acciones de Cabecera */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Botón Volver al Panel (Solo para usuarios autenticados / administradores) */}
+            {session && (
+              <Link
+                href="/dashboard"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-[#26302B] hover:bg-[#323D37] text-[#FAF7F2] border border-[#26302B] transition-all shadow-xs cursor-pointer"
+                title="Regresar al panel de administración"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 text-[#C49A5A]" />
+                <span className="hidden sm:inline">Volver al Panel</span>
+                <span className="sm:hidden">Panel</span>
+              </Link>
+            )}
+
             {/* Botón Copiar Enlace */}
             <button
               onClick={handleCopyLink}

@@ -46,6 +46,7 @@ export default function SettingsPage() {
   const [whatsapp, setWhatsapp] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [ticketFooter, setTicketFooter] = useState("");
+  const [bannerText, setBannerText] = useState("");
 
   const [savingCompany, setSavingCompany] = useState(false);
   const [companySuccess, setCompanySuccess] = useState(false);
@@ -83,6 +84,7 @@ export default function SettingsPage() {
         setWhatsapp(t.whatsapp || "");
         setLogoUrl(t.logoUrl || null);
         setTicketFooter(s?.ticketFooter || "");
+        setBannerText(s?.ticketHeader || "");
 
         if (session?.fullName) {
           setFullName(session.fullName);
@@ -118,6 +120,7 @@ export default function SettingsPage() {
         whatsapp,
         logoUrl,
         ticketFooter,
+        bannerText,
       };
 
       await settingsService.updateTenantProfile(tenantId, payload);
@@ -361,6 +364,23 @@ export default function SettingsPage() {
                       onChange={(e) => setAddress(e.target.value)}
                       className="w-full rounded-xl border border-[#DDD9D0] bg-white px-3 py-2 text-xs text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
                     />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-semibold text-[#26302B] flex items-center gap-1.5">
+                      <span>Franja Superior / Eslogan del Catálogo Digital</span>
+                      <span className="text-[10px] text-[#C49A5A] font-bold bg-[#FAF2E6] px-2 py-0.5 rounded-md border border-[#E7D6BE]">Visible al público</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: Confección Artesanal Yucateca · Mérida, México"
+                      value={bannerText}
+                      onChange={(e) => setBannerText(e.target.value)}
+                      className="w-full rounded-xl border border-[#DDD9D0] bg-white px-3 py-2 text-xs text-[#26302B] focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30"
+                    />
+                    <p className="text-[10px] text-[#9DAAA2]">
+                      Este texto se mostrará en la franja dorada superior del catálogo digital público que compartes con tus clientes.
+                    </p>
                   </div>
 
                   <div className="flex flex-col gap-1.5">

@@ -12,6 +12,7 @@ export interface PublicTenantInfo {
   address: string | null;
   logoUrl: string | null;
   whatsapp: string | null;
+  bannerText?: string | null;
 }
 
 export interface PublicFilterOptions {
@@ -106,7 +107,7 @@ export const publicCatalogService = {
     // 1. Búsqueda exacta por slug
     let { data } = await supabase
       .from("tenants")
-      .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+      .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
       .or(`slug.eq.${rawSlug},slug.eq.${cleanSlugWithoutPrefix}`)
       .eq("is_active", true)
       .maybeSingle();
@@ -116,7 +117,7 @@ export const publicCatalogService = {
       const searchName = cleanSlugWithoutPrefix.replace(/-/g, " ").replace(/&/g, "").trim();
       const { data: fallbackData } = await supabase
         .from("tenants")
-        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
         .ilike("name", `%${searchName}%`)
         .eq("is_active", true)
         .limit(1)
@@ -129,7 +130,7 @@ export const publicCatalogService = {
     if (!data) {
       const { data: latestTenant } = await supabase
         .from("tenants")
-        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
         .eq("is_active", true)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -142,6 +143,11 @@ export const publicCatalogService = {
       return null;
     }
 
+    const settingsData = (data as any).tenant_settings;
+    const bannerText = Array.isArray(settingsData)
+      ? settingsData[0]?.ticket_header
+      : settingsData?.ticket_header;
+
     return {
       id: data.id,
       name: data.name,
@@ -151,6 +157,7 @@ export const publicCatalogService = {
       address: data.address || null,
       logoUrl: data.logo_url || null,
       whatsapp: data.whatsapp || data.phone || null,
+      bannerText: bannerText || null,
     };
   },
 

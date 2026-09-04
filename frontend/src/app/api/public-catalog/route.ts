@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       // 1. Búsqueda por slug
       const { data: tData } = await supabaseAdmin
         .from("tenants")
-        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+        .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
         .or(`slug.eq.${rawSlug},slug.eq.${cleanSlugWithoutPrefix}`)
         .eq("is_active", true)
         .maybeSingle();
@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
         const searchName = cleanSlugWithoutPrefix.replace(/-/g, " ").replace(/&/g, "").trim();
         const { data: fallbackData } = await supabaseAdmin
           .from("tenants")
-          .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+          .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
           .ilike("name", `%${searchName}%`)
           .eq("is_active", true)
           .limit(1)
@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
         // Fallback al más reciente
         const { data: latestTenant } = await supabaseAdmin
           .from("tenants")
-          .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active")
+          .select("id, name, slug, phone, email, address, logo_url, whatsapp, is_active, tenant_settings(ticket_header)")
           .eq("is_active", true)
           .order("created_at", { ascending: false })
           .limit(1)
@@ -212,6 +212,10 @@ export async function GET(req: NextRequest) {
       mangas: (sleevesRes.data || []).map((sl: any) => ({ id: sl.id, name: sl.name })),
     };
 
+    const banner = Array.isArray(tenantData?.tenant_settings)
+      ? tenantData.tenant_settings[0]?.ticket_header
+      : tenantData?.tenant_settings?.ticket_header;
+
     const tenantInfo = tenantData ? {
       id: tenantData.id,
       name: tenantData.name,
@@ -221,6 +225,7 @@ export async function GET(req: NextRequest) {
       address: tenantData.address || null,
       logoUrl: tenantData.logo_url || null,
       whatsapp: tenantData.whatsapp || tenantData.phone || null,
+      bannerText: banner || null,
     } : null;
 
     return NextResponse.json({

@@ -12,7 +12,9 @@ export interface UpdateTenantDTO {
   address?: string | null;
   logoUrl?: string | null;
   whatsapp?: string | null;
+  ticketHeader?: string | null;
   ticketFooter?: string | null;
+  bannerText?: string | null;
 }
 
 export const settingsService = {
@@ -88,23 +90,28 @@ export const settingsService = {
       throw new Error(`Error al actualizar datos de la empresa: ${tenantErr.message}`);
     }
 
-    // Actualizar o crear configuración de tickets si viene ticketFooter
-    if (dto.ticketFooter !== undefined) {
+    // Actualizar o crear configuración de tickets / eslogan
+    const bannerVal = dto.bannerText !== undefined ? dto.bannerText : dto.ticketHeader;
+    if (dto.ticketFooter !== undefined || bannerVal !== undefined) {
       const { data: existing } = await supabase
         .from("tenant_settings")
         .select("id")
         .eq("tenant_id", tenantId)
         .single();
 
+      const updateData: any = {};
+      if (dto.ticketFooter !== undefined) updateData.ticket_footer = dto.ticketFooter?.trim() || null;
+      if (bannerVal !== undefined) updateData.ticket_header = bannerVal?.trim() || null;
+
       if (existing) {
         await supabase
           .from("tenant_settings")
-          .update({ ticket_footer: dto.ticketFooter?.trim() || null })
+          .update(updateData)
           .eq("tenant_id", tenantId);
       } else {
         await supabase.from("tenant_settings").insert({
           tenant_id: tenantId,
-          ticket_footer: dto.ticketFooter?.trim() || null,
+          ...updateData,
         });
       }
     }
