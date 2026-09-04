@@ -1019,7 +1019,13 @@ function InventarioYProductosContent() {
                               title="Clic para editar fotos y datos"
                             >
                               {model.imageUrl ? (
-                                <img src={model.imageUrl} alt={model.name} className="w-full h-full object-cover" />
+                                <img
+                                  src={model.imageUrl}
+                                  alt={model.name}
+                                  loading="lazy"
+                                  decoding="async"
+                                  className="w-full h-full object-cover"
+                                />
                               ) : (
                                 <Shirt className="w-5 h-5 text-[#8FA393]" />
                               )}

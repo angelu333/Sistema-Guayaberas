@@ -57,11 +57,17 @@ function PublicCatalogContent({ slug }: { slug: string }) {
   // Estado del Carrito / Lista de Pedido Público
   const [cartItems, setCartItems] = useState<PublicCartItem[]>([]);
   const [searchText, setSearchText] = useState("");
+  const [visibleCount, setVisibleCount] = useState(16);
 
   const selectedModelo = searchParams.get("modelo") || "";
   const selectedManga = searchParams.get("manga") || "";
   const selectedTalla = searchParams.get("talla") || "";
   const selectedColor = searchParams.get("color") || "";
+
+  // Resetear paginación al cambiar búsqueda o filtros
+  useEffect(() => {
+    setVisibleCount(16);
+  }, [selectedModelo, selectedManga, selectedTalla, selectedColor, searchText]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -439,7 +445,9 @@ function PublicCatalogContent({ slug }: { slug: string }) {
           <p className="text-xs font-semibold text-[#8B7D6B]">
             {loading
               ? "Cargando..."
-              : `${displayedProducts.length} modelo${displayedProducts.length !== 1 ? "s" : ""} disponible${displayedProducts.length !== 1 ? "s" : ""}`}
+              : displayedProducts.length <= visibleCount
+              ? `${displayedProducts.length} modelo${displayedProducts.length !== 1 ? "s" : ""} disponible${displayedProducts.length !== 1 ? "s" : ""}`
+              : `Mostrando ${Math.min(visibleCount, displayedProducts.length)} de ${displayedProducts.length} modelos`}
           </p>
 
           {/* Resumen de Filtros Activos en forma de chips */}
@@ -488,148 +496,187 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                 setSearchText("");
                 clearAllFilters();
               }}
-              className="mt-4 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#556B5D] hover:bg-[#44564A] transition-colors"
+              className="mt-4 px-5 py-2 rounded-xl text-xs font-bold text-white bg-[#556B5D] hover:bg-[#44564A] transition-colors cursor-pointer"
             >
               Ver todos los modelos
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
-            {displayedProducts.map((p) => {
-              const isOutOfStock = p.totalStock <= 0;
-              const isLowStock = p.totalStock > 0 && p.totalStock <= 3;
-              const isCorta = (p.sleeveTypeName || "").toLowerCase().includes("corta");
-              return (
-                <div
-                  key={p.cardKey ?? p.productId}
-                  onClick={() => setSelectedProductForModal(p)}
-                  className="group cursor-pointer rounded-2xl overflow-hidden flex flex-col bg-white border border-[#E4DDD1] hover:border-[#556B5D] hover:shadow-lg transition-all"
-                >
-                    {/* Fotografía — Ratio 3:4 */}
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+              {displayedProducts.slice(0, visibleCount).map((p) => {
+                const isOutOfStock = p.totalStock <= 0;
+                const isLowStock = p.totalStock > 0 && p.totalStock <= 3;
+                const isCorta = (p.sleeveTypeName || "").toLowerCase().includes("corta");
+                return (
+                  <div
+                    key={p.cardKey ?? p.productId}
+                    onClick={() => setSelectedProductForModal(p)}
+                    className="group cursor-pointer rounded-2xl overflow-hidden flex flex-col bg-white border border-[#E4DDD1] hover:border-[#556B5D] hover:shadow-lg transition-all"
+                  >
+                    {/* Fotografía — Ratio 3:4 con Lazy Loading */}
                     <div className="relative overflow-hidden aspect-3/4 bg-[#F5EFE3]">
                       {p.imageUrl ? (
                         <img
                           src={p.imageUrl}
                           alt={p.name}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                         />
                       ) : (
-
-                      <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-[#C49A5A]">
-                        <Shirt className="w-14 h-14 stroke-1" />
-                        <span className="text-[11px] text-[#8B7D6B]">Guayabera Fina</span>
-                      </div>
-                    )}
-
-                    {/* Overlay con botón al hacer hover */}
-                    <div className="absolute inset-0 flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100 transition-opacity duration-250 bg-gradient-to-t from-black/60 via-transparent to-transparent">
-                      <span className="text-white text-xs font-bold px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-xs border border-white/30 flex items-center gap-1">
-                        <Eye className="w-3.5 h-3.5" />
-                        Ver Modelo
-                      </span>
-                    </div>
-
-                    {/* Badge tipo de manga (Manga Corta / Manga Larga) — arriba izquierda */}
-                    {p.sleeveTypeName && (
-                      <div className="absolute top-2 left-2">
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs ${
-                            isCorta
-                              ? "bg-[#3F7D58] text-white"
-                              : "bg-[#26302B] text-white"
-                          }`}
-                        >
-                          {p.sleeveTypeName}
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Badge de Disponibilidad arriba-derecha */}
-                    <div className="absolute top-2 right-2">
-                      {isOutOfStock ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#B85450] text-white shadow-xs">
-                          Agotado
-                        </span>
-                      ) : isLowStock ? (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#C49A5A] text-white shadow-xs">
-                          Pocas piezas
-                        </span>
-                      ) : (
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#3F7D58] text-white shadow-xs">
-                          Disponible
-                        </span>
+                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-[#C49A5A]">
+                          <Shirt className="w-14 h-14 stroke-1" />
+                          <span className="text-[11px] text-[#8B7D6B]">Guayabera Fina</span>
+                        </div>
                       )}
-                    </div>
-                  </div>
 
-                  {/* Contenido debajo de la foto */}
-                  <div className="p-3.5 flex flex-col gap-1.5 flex-1">
-                    <h3 className="font-extrabold text-sm text-[#26302B] leading-snug group-hover:text-[#556B5D] transition-colors">
-                      {p.name}
-                    </h3>
+                      {/* Overlay con botón al hacer hover */}
+                      <div className="absolute inset-0 flex items-end justify-center pb-4 opacity-0 group-hover:opacity-100 transition-opacity duration-250 bg-gradient-to-t from-black/60 via-transparent to-transparent">
+                        <span className="text-white text-xs font-bold px-4 py-1.5 rounded-full bg-white/20 backdrop-blur-xs border border-white/30 flex items-center gap-1">
+                          <Eye className="w-3.5 h-3.5" />
+                          Ver Modelo
+                        </span>
+                      </div>
 
-                    {/* Chips de colores disponibles */}
-                    {p.availableColors.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {p.availableColors.slice(0, 3).map((col) => (
+                      {/* Badge tipo de manga (Manga Corta / Manga Larga) — arriba izquierda */}
+                      {p.sleeveTypeName && (
+                        <div className="absolute top-2 left-2">
                           <span
-                            key={col}
-                            className="text-[10px] px-1.5 py-0.2 rounded bg-[#EDE7DA] text-[#8B7D6B] font-medium"
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs ${
+                              isCorta
+                                ? "bg-[#3F7D58] text-white"
+                                : "bg-[#26302B] text-white"
+                            }`}
                           >
-                            {col}
+                            {p.sleeveTypeName}
                           </span>
-                        ))}
-                        {p.availableColors.length > 3 && (
-                          <span className="text-[10px] font-bold text-[#C49A5A]">
-                            +{p.availableColors.length - 3}
+                        </div>
+                      )}
+
+                      {/* Badge de Disponibilidad arriba-derecha */}
+                      <div className="absolute top-2 right-2">
+                        {isOutOfStock ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#B85450] text-white shadow-xs">
+                            Agotado
+                          </span>
+                        ) : isLowStock ? (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#C49A5A] text-white shadow-xs">
+                            Pocas piezas
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#3F7D58] text-white shadow-xs">
+                            Disponible
                           </span>
                         )}
                       </div>
-                    )}
-
-                    {/* Mangas y Tallas disponibles */}
-                    <div className="flex flex-wrap items-center gap-1">
-                      {p.availableSleeves && p.availableSleeves.length > 0 && (
-                        p.availableSleeves.map((sl) => (
-                          <span
-                            key={sl}
-                            className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#EBF0EC] text-[#556B5D] border border-[#A7D7B9]/60"
-                          >
-                            {sl}
-                          </span>
-                        ))
-                      )}
-
-                      {p.availableSizes.length > 0 && (
-                        p.availableSizes.map((sz) => (
-                          <span
-                            key={sz}
-                            className="text-[10px] font-bold px-1.5 py-0.2 rounded border border-[#E4DDD1] text-[#26302B] bg-[#F5EFE3]"
-                          >
-                            {sz}
-                          </span>
-                        ))
-                      )}
                     </div>
 
-                    {/* Precio */}
-                    <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#EDE7DA]">
-                      <div>
-                        <span className="text-[10px] text-[#8B7D6B] block">Precio</span>
-                        <p className="text-sm font-extrabold text-[#556B5D]">
-                          ${p.minPrice.toFixed(2)}
-                          <span className="text-[10px] font-normal text-[#8B7D6B] ml-0.5">MXN</span>
-                        </p>
+                    {/* Contenido debajo de la foto */}
+                    <div className="p-3.5 flex flex-col gap-1.5 flex-1">
+                      <h3 className="font-extrabold text-sm text-[#26302B] leading-snug group-hover:text-[#556B5D] transition-colors">
+                        {p.name}
+                      </h3>
+
+                      {/* Chips de colores disponibles */}
+                      {p.availableColors.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {p.availableColors.slice(0, 3).map((col) => (
+                            <span
+                              key={col}
+                              className="text-[10px] px-1.5 py-0.2 rounded bg-[#EDE7DA] text-[#8B7D6B] font-medium"
+                            >
+                              {col}
+                            </span>
+                          ))}
+                          {p.availableColors.length > 3 && (
+                            <span className="text-[10px] font-bold text-[#C49A5A]">
+                              +{p.availableColors.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Mangas y Tallas disponibles */}
+                      <div className="flex flex-wrap items-center gap-1">
+                        {p.availableSleeves && p.availableSleeves.length > 0 && (
+                          p.availableSleeves.map((sl) => (
+                            <span
+                              key={sl}
+                              className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-[#EBF0EC] text-[#556B5D] border border-[#A7D7B9]/60"
+                            >
+                              {sl}
+                            </span>
+                          ))
+                        )}
+
+                        {p.availableSizes.length > 0 && (
+                          p.availableSizes.map((sz) => (
+                            <span
+                              key={sz}
+                              className="text-[10px] font-bold px-1.5 py-0.2 rounded border border-[#E4DDD1] text-[#26302B] bg-[#F5EFE3]"
+                            >
+                              {sz}
+                            </span>
+                          ))
+                        )}
                       </div>
-                      <div className="w-7 h-7 rounded-full bg-[#EDE7DA] text-[#556B5D] flex items-center justify-center">
-                        <ChevronRight className="w-4 h-4" />
+
+                      {/* Precio */}
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#EDE7DA]">
+                        <div>
+                          <span className="text-[10px] text-[#8B7D6B] block">Precio</span>
+                          <p className="text-sm font-extrabold text-[#556B5D]">
+                            ${p.minPrice.toFixed(2)}
+                            <span className="text-[10px] font-normal text-[#8B7D6B] ml-0.5">MXN</span>
+                          </p>
+                        </div>
+                        <div className="w-7 h-7 rounded-full bg-[#EDE7DA] text-[#556B5D] flex items-center justify-center">
+                          <ChevronRight className="w-4 h-4" />
+                        </div>
                       </div>
                     </div>
                   </div>
+                );
+              })}
+            </div>
+
+            {/* Botón de Paginación Progresiva / Cargar Más */}
+            {visibleCount < displayedProducts.length && (
+              <div className="mt-8 flex flex-col items-center justify-center gap-3 py-4">
+                <p className="text-xs text-[#8B7D6B] font-medium">
+                  Mostrando <span className="font-bold text-[#26302B]">{Math.min(visibleCount, displayedProducts.length)}</span> de{" "}
+                  <span className="font-bold text-[#26302B]">{displayedProducts.length}</span> modelos
+                </p>
+
+                {/* Barra de progreso visual elegante */}
+                <div className="w-48 h-1.5 bg-[#EDE7DA] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#556B5D] rounded-full transition-all duration-300"
+                    style={{ width: `${(Math.min(visibleCount, displayedProducts.length) / displayedProducts.length) * 100}%` }}
+                  />
                 </div>
-              );
-            })}
-          </div>
+
+                <div className="flex items-center gap-2 mt-1">
+                  <button
+                    onClick={() => setVisibleCount((prev) => prev + 16)}
+                    className="px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-[#556B5D] hover:bg-[#44564A] transition-all shadow-xs hover:shadow-md active:scale-98 cursor-pointer flex items-center gap-2"
+                  >
+                    <span>Cargar más guayaberas (+{Math.min(16, displayedProducts.length - visibleCount)})</span>
+                  </button>
+
+                  {displayedProducts.length - visibleCount > 16 && (
+                    <button
+                      onClick={() => setVisibleCount(displayedProducts.length)}
+                      className="px-4 py-2.5 rounded-xl text-xs font-semibold text-[#556B5D] bg-[#EBF0EC] hover:bg-[#DFE8E1] border border-[#A7D7B9]/60 transition-all cursor-pointer"
+                    >
+                      Ver todas ({displayedProducts.length})
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

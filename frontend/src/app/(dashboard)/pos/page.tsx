@@ -352,6 +352,8 @@ export default function POSPage() {
                           <img
                             src={prod.imageUrl}
                             alt={prod.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-full h-full object-cover"
                           />
                         ) : (
