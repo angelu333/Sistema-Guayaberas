@@ -222,7 +222,8 @@ export const publicCatalogService = {
           description, 
           image_url,
           is_active, 
-          categorias(id, name)
+          categorias(id, name),
+          imagenes_producto(id, url, sort_order, is_primary)
         ),
         colores(id, name, hex_code),
         tallas(id, name, sort_order),
@@ -264,9 +265,18 @@ export const publicCatalogService = {
     let mapped: ProductVariant[] = data.map((v: any) => {
       const totalStock = stockMap.get(v.id) || 0;
 
-      const pImages = v.productos?.image_url
-        ? [{ id: "primary", url: v.productos.image_url, sortOrder: 1, isPrimary: true }]
-        : [];
+      const prodImages = (v.productos?.imagenes_producto || []).map((img: any) => ({
+        id: img.id,
+        url: img.url,
+        sortOrder: img.sort_order,
+        isPrimary: img.is_primary,
+      }));
+
+      const pImages = prodImages.length > 0
+        ? prodImages
+        : v.productos?.image_url
+          ? [{ id: "primary", url: v.productos.image_url, sortOrder: 1, isPrimary: true }]
+          : [];
 
       const varImages = (varImgsMap.get(v.id) || []).map((img: any) => ({
         id: img.id,

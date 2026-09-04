@@ -14,6 +14,10 @@ import {
   Package,
   Minus,
   Plus,
+  Star,
+  Trash2,
+  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { productsService, CreateVariantDTO } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
@@ -58,12 +62,10 @@ function slugify(str: string): string {
 function getColorCode(colorName: string): string {
   const words = colorName.trim().split(/\s+/).filter(Boolean);
   if (words.length >= 2) {
-    // Ej: "Azul Marino" -> "AZMA", "Azul Cielo" -> "AZCI", "Blanco Diamante" -> "BLDI"
     const w1 = slugify(words[0]).slice(0, 2);
     const w2 = slugify(words[1]).slice(0, 2);
     return `${w1}${w2}`;
   }
-  // Color de 1 sola palabra: "Blanco" -> "BLA", "Negro" -> "NEG", "Rojo" -> "ROJ"
   return slugify(colorName).slice(0, 3);
 }
 
@@ -117,9 +119,10 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   // Precio por manga: { [sleeveId]: number }
   const [priceBySleve, setPriceBySleeve] = useState<Record<string, number>>({});
 
-  // Foto
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  // Fotos del modelo (Galería con portada y múltiples tomas)
+  const [images, setImages] = useState<{ url: string; isPrimary: boolean }[]>([]);
   const [photoDragging, setPhotoDragging] = useState(false);
+  const [processingPhotos, setProcessingPhotos] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Crear rápido
@@ -172,7 +175,8 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setSelectedSizes(new Set());
     setSelectedSleeves(new Set());
     setPriceBySleeve({});
-    setPhotoUrl(null);
+    setImages([]);
+    setProcessingPhotos(false);
     setError(null);
     setSuccess(false);
     setShowAddColor(false);
@@ -205,9 +209,60 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
 
   const totalVariants = selectedColors.size * selectedSizes.size * selectedSleeves.size;
 
-  const handlePhotoFile = async (file: File) => {
-    if (!file.type.startsWith("image/")) return;
-    setPhotoUrl(await compressImage(file));
+  const handlePhotoFiles = async (files: FileList | File[]) => {
+    const fileList = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (fileList.length === 0) return;
+
+    setProcessingPhotos(true);
+    const maxPhotos = 6;
+    const remainingSlots = Math.max(0, maxPhotos - images.length);
+    const filesToProcess = fileList.slice(0, remainingSlots);
+
+    const newImgs: { url: string; isPrimary: boolean }[] = [];
+    for (const file of filesToProcess) {
+      try {
+        const compressed = await compressImage(file);
+        const isFirst = images.length === 0 && newImgs.length === 0;
+        newImgs.push({ url: compressed, isPrimary: isFirst });
+      } catch (err) {
+        console.error("Error al procesar foto:", err);
+      }
+    }
+
+    if (newImgs.length > 0) {
+      setImages((prev) => {
+        const merged = [...prev, ...newImgs];
+        if (!merged.some((img) => img.isPrimary) && merged.length > 0) {
+          merged[0].isPrimary = true;
+        }
+        return merged;
+      });
+    }
+
+    setProcessingPhotos(false);
+    if (photoInputRef.current) {
+      photoInputRef.current.value = "";
+    }
+  };
+
+  const handleSetPrimaryPhoto = (index: number) => {
+    setImages((prev) =>
+      prev.map((img, i) => ({
+        ...img,
+        isPrimary: i === index,
+      }))
+    );
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setImages((prev) => {
+      const wasPrimary = prev[index]?.isPrimary;
+      const filtered = prev.filter((_, i) => i !== index);
+      if (wasPrimary && filtered.length > 0) {
+        filtered[0].isPrimary = true;
+      }
+      return filtered;
+    });
   };
 
   const toggleSet = (set: Set<string>, id: string): Set<string> => {
@@ -322,7 +377,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
       await productsService.createProduct(session.tenantId, {
         name: name.trim(),
         categoryId: categoryId || undefined,
-        images: photoUrl ? [{ url: photoUrl, isPrimary: true }] : undefined,
+        images: images.length > 0 ? images.map((img) => ({ url: img.url, isPrimary: img.isPrimary })) : undefined,
         variants,
         locationId: locationId || undefined,
       });
@@ -401,56 +456,155 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
           <>
             <div className="flex flex-col md:flex-row flex-1 min-h-0 overflow-y-auto md:overflow-hidden">
 
-              {/* COLUMNA IZQUIERDA: FOTO + SUCURSAL */}
-              <div className="w-full md:w-52 shrink-0 bg-[#F8F6F1] border-b md:border-b-0 md:border-r border-[#E7E3DA] flex flex-col gap-2.5 p-3 sm:p-4">
-                <p className="text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider">Foto del Modelo</p>
-
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setPhotoDragging(true); }}
-                  onDragLeave={() => setPhotoDragging(false)}
-                  onDrop={async (e) => { e.preventDefault(); setPhotoDragging(false); const f = e.dataTransfer.files[0]; if (f) await handlePhotoFile(f); }}
-                  onClick={() => photoInputRef.current?.click()}
-                  className={[
-                    "relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden h-24 md:h-auto md:aspect-square w-full",
-                    photoDragging ? "border-[#3F7D58] bg-[#EBF5F0]" : photoUrl ? "border-[#3F7D58]/40 bg-white" : "border-[#DDD9D0] bg-white hover:border-[#3F7D58]/60 hover:bg-[#F0F4F1]",
-                  ].join(" ")}
-                >
-                  {photoUrl ? (
-                    <>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={photoUrl} alt="Preview" className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                        <p className="text-white text-xs font-bold">Cambiar foto</p>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="flex flex-row md:flex-col items-center justify-center gap-2 md:gap-1 p-2">
-                      <div className="w-7 h-7 md:w-9 md:h-9 rounded-full bg-[#E7E3DA] flex items-center justify-center shrink-0">
-                        <Upload className="w-3.5 h-3.5 md:w-4 md:h-4 text-[#6B7A71]" />
-                      </div>
-                      <div className="text-left md:text-center">
-                        <p className="text-[11px] text-[#6B7A71] font-medium leading-snug">
-                          Arrastra una foto o haz clic
-                        </p>
-                        <p className="text-[10px] text-[#9DAAA2]">Opcional</p>
-                      </div>
-                    </div>
+              {/* COLUMNA IZQUIERDA: FOTOS + SUCURSAL */}
+              <div className="w-full md:w-56 lg:w-60 shrink-0 bg-[#F8F6F1] border-b md:border-b-0 md:border-r border-[#E7E3DA] flex flex-col gap-2.5 p-3 sm:p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider">
+                    Fotos ({images.length}/6)
+                  </p>
+                  {processingPhotos && (
+                    <span className="flex items-center gap-1 text-[10px] text-[#3F7D58] font-semibold animate-pulse">
+                      <Loader2 className="w-3 h-3 animate-spin" /> Procesando
+                    </span>
                   )}
                 </div>
+
+                {/* Si no hay fotos subidas aún */}
+                {images.length === 0 ? (
+                  <div
+                    onDragOver={(e) => { e.preventDefault(); setPhotoDragging(true); }}
+                    onDragLeave={() => setPhotoDragging(false)}
+                    onDrop={async (e) => {
+                      e.preventDefault();
+                      setPhotoDragging(false);
+                      if (e.dataTransfer.files?.length) {
+                        await handlePhotoFiles(e.dataTransfer.files);
+                      }
+                    }}
+                    onClick={() => photoInputRef.current?.click()}
+                    className={[
+                      "relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed cursor-pointer transition-all overflow-hidden h-28 md:h-auto md:aspect-square w-full",
+                      photoDragging ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white hover:border-[#3F7D58]/60 hover:bg-[#F0F4F1]",
+                    ].join(" ")}
+                  >
+                    <div className="flex flex-row md:flex-col items-center justify-center gap-2 md:gap-1 p-2 text-center">
+                      <div className="w-8 h-8 md:w-9 md:h-9 rounded-full bg-[#E7E3DA] flex items-center justify-center shrink-0">
+                        <Upload className="w-4 h-4 text-[#6B7A71]" />
+                      </div>
+                      <div className="text-left md:text-center">
+                        <p className="text-[11px] text-[#26302B] font-bold leading-snug">
+                          Arrastra fotos o haz clic
+                        </p>
+                        <p className="text-[10px] text-[#6B7A71] leading-tight">
+                          Hasta 6 fotos (frente, espalda, detalles)
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  /* Galería de fotos con Principal destacada y miniaturas */
+                  <div className="flex flex-col gap-2">
+                    {/* Foto Principal Destacada */}
+                    {(() => {
+                      const primaryIndex = images.findIndex((img) => img.isPrimary);
+                      const primaryImg = primaryIndex >= 0 ? images[primaryIndex] : images[0];
+                      const actualIdx = primaryIndex >= 0 ? primaryIndex : 0;
+                      return (
+                        <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-[#DDD9D0] bg-white shadow-xs group">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={primaryImg.url}
+                            alt="Foto Principal"
+                            className="w-full h-full object-cover"
+                          />
+                          <div className="absolute top-1.5 left-1.5 bg-[#3F7D58] text-white px-2 py-0.5 rounded-md text-[10px] font-extrabold flex items-center gap-1 shadow-xs">
+                            <Star className="w-3 h-3 fill-current" /> Portada
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(actualIdx)}
+                            className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-[#B85450] text-white p-1 rounded-md opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="Eliminar foto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Fila de Miniaturas de fotos adicionales */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {images.map((img, idx) => (
+                        <div
+                          key={idx}
+                          className={`relative aspect-square rounded-lg overflow-hidden border group transition-all ${
+                            img.isPrimary
+                              ? "border-[#3F7D58] ring-2 ring-[#3F7D58]/40"
+                              : "border-[#DDD9D0] hover:border-[#6B7A71]"
+                          }`}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={img.url}
+                            alt={`Foto ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          {/* Overlay de acciones */}
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                            {!img.isPrimary && (
+                              <button
+                                type="button"
+                                onClick={() => handleSetPrimaryPhoto(idx)}
+                                className="p-1 rounded bg-white text-[#C49A5A] hover:bg-[#C49A5A] hover:text-white transition-colors cursor-pointer"
+                                title="Hacer foto de portada"
+                              >
+                                <Star className="w-3 h-3" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemovePhoto(idx)}
+                              className="p-1 rounded bg-white text-[#B85450] hover:bg-[#B85450] hover:text-white transition-colors cursor-pointer"
+                              title="Eliminar foto"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Botón para agregar más fotos si no ha llegado al límite */}
+                      {images.length < 6 && (
+                        <button
+                          type="button"
+                          onClick={() => photoInputRef.current?.click()}
+                          className="aspect-square rounded-lg border-2 border-dashed border-[#DDD9D0] hover:border-[#3F7D58] bg-white hover:bg-[#EBF5F0] flex flex-col items-center justify-center text-[#6B7A71] hover:text-[#3F7D58] transition-all cursor-pointer"
+                          title="Agregar otra foto"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span className="text-[9px] font-bold">+ Foto</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-[#8FA393] text-center leading-tight">
+                      Usa ⭐ para cambiar portada o 🗑️ para eliminar.
+                    </p>
+                  </div>
+                )}
 
                 <input
                   ref={photoInputRef}
                   type="file"
                   accept="image/*"
+                  multiple
                   className="hidden"
-                  onChange={async (e) => { const f = e.target.files?.[0]; if (f) await handlePhotoFile(f); }}
+                  onChange={async (e) => {
+                    if (e.target.files?.length) {
+                      await handlePhotoFiles(e.target.files);
+                    }
+                  }}
                 />
-
-                {photoUrl && (
-                  <button type="button" onClick={() => setPhotoUrl(null)} className="text-[11px] text-[#B85450] hover:underline text-center cursor-pointer">
-                    Quitar foto
-                  </button>
-                )}
 
                 <div className="mt-1 md:mt-auto">
                   <label className="text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider flex items-center gap-1 mb-1">
@@ -665,9 +819,13 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
 
               {/* RESUMEN DEL MODELO */}
               <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-[#F8F6F1] rounded-2xl border border-[#E7E3DA] flex items-center gap-3">
-                {photoUrl && (
+                {images.length > 0 && (
                   /* eslint-disable-next-line @next/next/no-img-element */
-                  <img src={photoUrl} alt="Modelo" className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-[#DDD9D0] shrink-0" />
+                  <img
+                    src={images.find((img) => img.isPrimary)?.url || images[0].url}
+                    alt="Modelo"
+                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl object-cover border border-[#DDD9D0] shrink-0"
+                  />
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-extrabold text-[#26302B] text-sm truncate" style={{ fontFamily: "Outfit, sans-serif" }}>{name}</p>
