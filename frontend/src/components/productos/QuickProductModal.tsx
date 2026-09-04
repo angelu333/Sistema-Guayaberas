@@ -55,12 +55,43 @@ function slugify(str: string): string {
     .slice(0, 6);
 }
 
-function buildSKU(productName: string, colorName: string, sizeName: string, sleeveName: string): string {
+function getColorCode(colorName: string): string {
+  const words = colorName.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    // Ej: "Azul Marino" -> "AZMA", "Azul Cielo" -> "AZCI", "Blanco Diamante" -> "BLDI"
+    const w1 = slugify(words[0]).slice(0, 2);
+    const w2 = slugify(words[1]).slice(0, 2);
+    return `${w1}${w2}`;
+  }
+  // Color de 1 sola palabra: "Blanco" -> "BLA", "Negro" -> "NEG", "Rojo" -> "ROJ"
+  return slugify(colorName).slice(0, 3);
+}
+
+function buildSKU(
+  productName: string,
+  colorName: string,
+  sizeName: string,
+  sleeveName: string,
+  existingSkus?: Set<string>
+): string {
   const p = slugify(productName);
-  const c = slugify(colorName).slice(0, 3);
+  const c = getColorCode(colorName);
   const s = sizeName.replace(/\s/g, "").toUpperCase().slice(0, 4);
   const m = sleeveName.toLowerCase().includes("larga") ? "LG" : "CT";
-  return (p + "-" + c + "-" + s + "-" + m).replace(/-+/g, "-");
+  const baseSku = (p + "-" + c + "-" + s + "-" + m).replace(/-+/g, "-");
+
+  if (existingSkus) {
+    let sku = baseSku;
+    let counter = 2;
+    while (existingSkus.has(sku)) {
+      sku = `${baseSku}-${counter}`;
+      counter++;
+    }
+    existingSkus.add(sku);
+    return sku;
+  }
+
+  return baseSku;
 }
 
 export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductModalProps) {
@@ -266,16 +297,19 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
       const sleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
 
       const variants: CreateVariantDTO[] = [];
+      const generatedSkus = new Set<string>();
+
       for (const color of colorArr) {
         for (const sleeve of sleeveArr) {
           for (const size of sizeArr) {
             const salePrice = priceBySleve[sleeve.id] ?? 750;
             const stockForSize = stockBySleeveAndSize[sleeve.id]?.[size.id] ?? 0;
+            const sku = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
             variants.push({
               colorId: color.id,
               sizeId: size.id,
               sleeveTypeId: sleeve.id,
-              sku: buildSKU(name, color.name, size.name, sleeve.name),
+              sku,
               costPrice: Math.round(salePrice * 0.5),
               salePrice,
               minStock: 5,

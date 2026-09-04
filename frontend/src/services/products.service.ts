@@ -932,23 +932,34 @@ export const productsService = {
    */
   generateSKU(productName: string, colorName?: string, sizeName?: string, sleeveName?: string): string {
     const pCode = productName
-      .slice(0, 4)
+      .slice(0, 6)
       .toUpperCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    const cCode = colorName
-      ? colorName.slice(0, 3).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-      : "GEN";
-    const sCode = sizeName ? sizeName.toUpperCase() : "UNI";
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Z0-9]/g, "");
+
+    let cCode = "GEN";
+    if (colorName) {
+      const words = colorName.trim().split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        const w1 = words[0].toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "").slice(0, 2);
+        const w2 = words[1].toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "").slice(0, 2);
+        cCode = `${w1}${w2}`;
+      } else {
+        cCode = colorName.slice(0, 3).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, "");
+      }
+    }
+
+    const sCode = sizeName ? sizeName.replace(/\s/g, "").toUpperCase().slice(0, 4) : "UNI";
     const slCode = sleeveName
       ? sleeveName.toLowerCase().includes("larga")
-        ? "-ML"
+        ? "-LG"
         : sleeveName.toLowerCase().includes("corta")
-        ? "-MC"
+        ? "-CT"
         : ""
       : "";
 
-    return `${pCode}-${cCode}-${sCode}${slCode}`;
+    return `${pCode}-${cCode}-${sCode}${slCode}`.replace(/-+/g, "-");
   },
 
   /**
