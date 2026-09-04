@@ -25,6 +25,7 @@ import { productsService, CreateVariantDTO } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
 import { Category, Color, Size, SleeveType, Location } from "@/types/domain.types";
 import { useAuthStore } from "@/stores/auth.store";
+import { uploadProductImage } from "@/lib/storage";
 
 interface QuickProductModalProps {
   isOpen: boolean;
@@ -228,11 +229,13 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     const filesToProcess = fileList.slice(0, remainingSlots);
 
     const newImgs: { url: string; isPrimary: boolean }[] = [];
+    const tenantId = session?.tenantId || "general";
+
     for (const file of filesToProcess) {
       try {
-        const compressed = await compressImage(file);
+        const publicStorageUrl = await uploadProductImage(file, tenantId);
         const isFirst = images.length === 0 && newImgs.length === 0;
-        newImgs.push({ url: compressed, isPrimary: isFirst });
+        newImgs.push({ url: publicStorageUrl, isPrimary: isFirst });
       } catch (err) {
         console.error("Error al procesar foto:", err);
       }

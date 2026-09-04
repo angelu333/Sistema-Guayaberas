@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Upload, Plus, Trash2, Star, Image as ImageIcon, Link as LinkIcon, X } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { uploadProductImage } from "@/lib/storage";
+import { useAuthStore } from "@/stores/auth.store";
 
 export interface UploadedImage {
   id?: string;
@@ -17,48 +19,17 @@ interface ImageGalleryUploaderProps {
   maxImages?: number;
 }
 
-/**
- * Comprime una imagen en el navegador para guardarla ligera y ultra rápida
- */
-async function compressImage(file: File, maxWidth = 1200, quality = 0.82): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth) {
-          height = Math.round((height * maxWidth) / width);
-          width = maxWidth;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        ctx?.drawImage(img, 0, 0, width, height);
-
-        const compressedDataUrl = canvas.toDataURL("image/jpeg", quality);
-        resolve(compressedDataUrl);
-      };
-    };
-  });
-}
-
 export function ImageGalleryUploader({
   images,
   onChange,
   maxImages = 5,
 }: ImageGalleryUploaderProps) {
+  const session = useAuthStore((state) => state.session);
   const [urlInput, setUrlInput] = useState("");
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [processing, setProcessing] = useState(false);
 
-  // Manejar subida de archivo desde la computadora / celular con compresión automática
+  // Manejar subida de archivo desde la computadora / celular con compresión automática y subida a Supabase Storage
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -68,6 +39,7 @@ export function ImageGalleryUploader({
     const filesToProcess = Array.from(files).slice(0, remainingSlots);
 
     const newImages: UploadedImage[] = [];
+    const tenantId = session?.tenantId || "general";
 
     for (const file of filesToProcess) {
       if (!file.type.startsWith("image/")) {
@@ -76,10 +48,10 @@ export function ImageGalleryUploader({
       }
 
       try {
-        const compressedUrl = await compressImage(file);
+        const publicUrl = await uploadProductImage(file, tenantId);
         const isFirst = images.length === 0 && newImages.length === 0;
         newImages.push({
-          url: compressedUrl,
+          url: publicUrl,
           isPrimary: isFirst,
           file,
         });
