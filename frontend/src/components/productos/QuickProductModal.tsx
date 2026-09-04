@@ -18,6 +18,8 @@ import {
   Trash2,
   Image as ImageIcon,
   Loader2,
+  Barcode,
+  RefreshCw,
 } from "lucide-react";
 import { productsService, CreateVariantDTO } from "@/services/products.service";
 import { inventoryService } from "@/services/inventory.service";
@@ -137,6 +139,10 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   // Paso 2: Stock por tipo de manga y talla { [sleeveId]: { [sizeId]: number } }
   const [stockBySleeveAndSize, setStockBySleeveAndSize] = useState<Record<string, Record<string, number>>>({});
   const [activeSleeveStep2, setActiveSleeveStep2] = useState<string>("");
+  const [activeColorStep2, setActiveColorStep2] = useState<string>("");
+  // SKUs personalizados por variante: { [`${colorId}_${sleeveId}_${sizeId}`]: string }
+  const [customSkus, setCustomSkus] = useState<Record<string, string>>({});
+  const [highlightedSkuError, setHighlightedSkuError] = useState<string | null>(null);
 
   // Estado general
   const [loading, setLoading] = useState(false);
@@ -184,6 +190,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setShowAddCategory(false);
     setStockBySleeveAndSize({});
     setActiveSleeveStep2("");
+    setActiveColorStep2("");
+    setCustomSkus({});
+    setHighlightedSkuError(null);
     setNewColorName("");
     setNewSizeName("");
     setNewCategoryName("");
@@ -315,6 +324,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   // Avanzar del Paso 1 al Paso 2
   const handleGoToStep2 = () => {
     setError(null);
+    setHighlightedSkuError(null);
     if (!name.trim()) { setError("El nombre del modelo es requerido."); return; }
     if (selectedColors.size === 0) { setError("Selecciona al menos un color."); return; }
     if (selectedSizes.size === 0) { setError("Selecciona al menos una talla."); return; }
@@ -322,6 +332,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
 
     const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
     const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
+    const selectedColorArr = allColors.filter((c) => selectedColors.has(c.id));
 
     // Inicializar matriz de stock para cada manga y talla
     const nextStock: Record<string, Record<string, number>> = {};
@@ -333,16 +344,63 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     });
     setStockBySleeveAndSize(nextStock);
 
+    // Inicializar SKUs sugeridos para todas las combinaciones
+    const nextSkus: Record<string, string> = { ...customSkus };
+    const generatedSkus = new Set<string>();
+
+    // Registrar SKUs que el usuario ya haya modificado a mano
+    Object.values(nextSkus).forEach((s) => {
+      if (s?.trim()) generatedSkus.add(s.toUpperCase().trim());
+    });
+
+    for (const color of selectedColorArr) {
+      for (const sleeve of selectedSleeveArr) {
+        for (const size of selectedSizeArr) {
+          const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
+          if (!nextSkus[skuKey]) {
+            const defSku = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
+            nextSkus[skuKey] = defSku;
+          }
+        }
+      }
+    }
+    setCustomSkus(nextSkus);
+
     if (!activeSleeveStep2 || !selectedSleeves.has(activeSleeveStep2)) {
       setActiveSleeveStep2(selectedSleeveArr[0]?.id || "");
+    }
+    if (!activeColorStep2 || !selectedColors.has(activeColorStep2)) {
+      setActiveColorStep2(selectedColorArr[0]?.id || "");
     }
 
     setStep(2);
   };
 
+  // Regenerar todos los códigos SKU con la nomenclatura automática
+  const handleRegenerateSkus = () => {
+    const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
+    const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
+    const selectedColorArr = allColors.filter((c) => selectedColors.has(c.id));
+
+    const newSkus: Record<string, string> = {};
+    const generatedSkus = new Set<string>();
+
+    for (const color of selectedColorArr) {
+      for (const sleeve of selectedSleeveArr) {
+        for (const size of selectedSizeArr) {
+          const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
+          newSkus[skuKey] = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
+        }
+      }
+    }
+    setCustomSkus(newSkus);
+    setHighlightedSkuError(null);
+  };
+
   // Guardar todo
   const handleSubmit = async () => {
     setError(null);
+    setHighlightedSkuError(null);
     if (!session?.tenantId) { setError("No se encontró una empresa activa."); return; }
 
     setLoading(true);
@@ -352,14 +410,27 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
       const sleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
 
       const variants: CreateVariantDTO[] = [];
-      const generatedSkus = new Set<string>();
+      const usedSkus = new Set<string>();
 
       for (const color of colorArr) {
         for (const sleeve of sleeveArr) {
           for (const size of sizeArr) {
             const salePrice = priceBySleve[sleeve.id] ?? 750;
             const stockForSize = stockBySleeveAndSize[sleeve.id]?.[size.id] ?? 0;
-            const sku = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
+            const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
+            const skuRaw = customSkus[skuKey] || buildSKU(name, color.name, size.name, sleeve.name);
+            const sku = skuRaw.toUpperCase().trim();
+
+            if (!sku) {
+              throw new Error(`Por favor ingresa un SKU válido para ${color.name} · ${sleeve.name} · Talla ${size.name}.`);
+            }
+
+            if (usedSkus.has(sku)) {
+              setHighlightedSkuError(sku);
+              throw new Error(`El código SKU "${sku}" está repetido en el formulario. Cada prenda debe tener un SKU único.`);
+            }
+            usedSkus.add(sku);
+
             variants.push({
               colorId: color.id,
               sizeId: size.id,
@@ -385,8 +456,15 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
       setSuccess(true);
       setTimeout(() => { onSuccess(); onClose(); }, 900);
     } catch (e: unknown) {
-      if (e instanceof Error) setError(e.message);
-      else setError("Error al guardar el producto.");
+      if (e instanceof Error) {
+        setError(e.message);
+        const match = e.message.match(/["']([^"']+)["']/);
+        if (match) {
+          setHighlightedSkuError(match[1]);
+        }
+      } else {
+        setError("Error al guardar el producto.");
+      }
     } finally {
       setLoading(false);
     }
@@ -399,9 +477,10 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   const chipActive = "bg-[#3F7D58] text-white border-[#3F7D58] shadow-sm";
   const chipIdle = "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#3F7D58] hover:bg-[#F0F4F1]";
 
-  // Tallas actualmente seleccionadas (en orden)
+  // Tallas, mangas y colores actualmente seleccionados (en orden)
   const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
   const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
+  const selectedColorArr = allColors.filter((c) => selectedColors.has(c.id));
 
   return (
     <div className="fixed inset-0 z-50 bg-[#26302B]/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
@@ -901,59 +980,131 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                 </div>
               )}
 
+              {/* SELECTOR DE PESTAÑAS POR COLOR (SI HAY MÁS DE 1 COLOR) */}
+              {selectedColorArr.length > 1 && (
+                <div className="mb-3">
+                  <p className="text-xs font-bold text-[#6B7A71] mb-1.5">Color para asignar stock y previsualizar SKUs:</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedColorArr.map((c) => {
+                      const isColorActive = c.id === (activeColorStep2 || selectedColorArr[0]?.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => setActiveColorStep2(c.id)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                            isColorActive
+                              ? "bg-[#26302B] text-white border-[#26302B] shadow-xs"
+                              : "bg-white text-[#6B7A71] border-[#DDD9D0] hover:border-[#26302B]"
+                          }`}
+                        >
+                          {c.hexCode && (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                              style={{ backgroundColor: c.hexCode }}
+                            />
+                          )}
+                          {c.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* INSTRUCCIÓN DE LA MANGA ACTIVA */}
               {(() => {
                 const currentSleeve = selectedSleeveArr.find((sl) => sl.id === activeSleeveStep2) || selectedSleeveArr[0];
                 if (!currentSleeve) return null;
                 const currentSleeveStock = stockBySleeveAndSize[currentSleeve.id] || {};
+                const currentColor = selectedColorArr.find((c) => c.id === (activeColorStep2 || selectedColorArr[0]?.id)) || selectedColorArr[0];
 
                 return (
                   <div>
-                    <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                       <div>
                         <h3 className="text-sm font-extrabold text-[#26302B]">
-                          Stock para: <span className="text-[#3F7D58]">{currentSleeve.name}</span>
+                          Stock y SKUs para: <span className="text-[#3F7D58]">{currentSleeve.name}</span>
+                          {currentColor && selectedColorArr.length > 1 && (
+                            <span className="text-[#6B7A71] font-semibold text-xs ml-1.5">
+                              (Color: {currentColor.name})
+                            </span>
+                          )}
                         </h3>
                         <p className="text-[11px] text-[#6B7A71]">
-                          Ingresa cuántas piezas entran de cada talla para {currentSleeve.name.toLowerCase()}.
+                          Ingresa las piezas por talla y edita libremente los códigos SKU de tus etiquetas.
                         </p>
                       </div>
 
-                      {/* Botón copiar a otras mangas */}
-                      {selectedSleeveArr.length > 1 && (
+                      <div className="flex items-center gap-2">
+                        {/* Botón regenerar SKUs automáticos */}
                         <button
                           type="button"
-                          onClick={() => {
-                            setStockBySleeveAndSize((prev) => {
-                              const next = { ...prev };
-                              const source = next[currentSleeve.id] || {};
-                              selectedSleeveArr.forEach((sl) => {
-                                if (sl.id !== currentSleeve.id) {
-                                  next[sl.id] = { ...source };
-                                }
-                              });
-                              return next;
-                            });
-                          }}
-                          className="text-[11px] font-bold text-[#3F7D58] hover:underline cursor-pointer bg-[#EBF5F0] px-2.5 py-1 rounded-lg border border-[#3F7D58]/20"
+                          onClick={handleRegenerateSkus}
+                          className="text-[11px] font-bold text-[#556B5D] hover:text-[#26302B] cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-[#DDD9D0] hover:border-[#556B5D] flex items-center gap-1 shadow-xs"
+                          title="Restablecer todos los SKUs al formato automático por defecto"
                         >
-                          Copiar cantidades a las demás mangas
+                          <RefreshCw className="w-3 h-3 text-[#3F7D58]" />
+                          Restablecer SKUs
                         </button>
-                      )}
+
+                        {/* Botón copiar a otras mangas */}
+                        {selectedSleeveArr.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setStockBySleeveAndSize((prev) => {
+                                const next = { ...prev };
+                                const source = next[currentSleeve.id] || {};
+                                selectedSleeveArr.forEach((sl) => {
+                                  if (sl.id !== currentSleeve.id) {
+                                    next[sl.id] = { ...source };
+                                  }
+                                });
+                                return next;
+                              });
+                            }}
+                            className="text-[11px] font-bold text-[#3F7D58] hover:underline cursor-pointer bg-[#EBF5F0] px-2.5 py-1 rounded-lg border border-[#3F7D58]/20"
+                          >
+                            Copiar cantidades a las demás mangas
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    {/* GRID DE TALLAS PARA LA MANGA ACTIVA */}
+                    {/* GRID DE TALLAS PARA LA MANGA Y COLOR ACTIVO */}
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                       {selectedSizeArr.map((s) => {
                         const qty = currentSleeveStock[s.id] ?? 0;
+                        const skuKey = currentColor ? `${currentColor.id}_${currentSleeve.id}_${s.id}` : "";
+                        const currentSku = skuKey ? (customSkus[skuKey] ?? "") : "";
+                        const isConflict = Boolean(
+                          highlightedSkuError &&
+                          currentSku &&
+                          currentSku.toUpperCase().trim() === highlightedSkuError.toUpperCase().trim()
+                        );
+
                         return (
                           <div
                             key={s.id}
-                            className={`rounded-2xl border-2 p-3 sm:p-4 flex flex-col items-center gap-2 sm:gap-3 transition-all ${qty > 0 ? "border-[#3F7D58] bg-[#EBF5F0]" : "border-[#DDD9D0] bg-white"}`}
+                            className={`rounded-2xl border-2 p-3 sm:p-3.5 flex flex-col items-center gap-2 transition-all ${
+                              isConflict
+                                ? "border-[#B85450] bg-[#FAEAEA] ring-2 ring-[#B85450]/40"
+                                : qty > 0
+                                ? "border-[#3F7D58] bg-[#EBF5F0]"
+                                : "border-[#DDD9D0] bg-white"
+                            }`}
                           >
-                            <span className={`text-base sm:text-lg font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
-                              {s.name}
-                            </span>
+                            <div className="flex items-center justify-between w-full">
+                              <span className={`text-base font-extrabold ${qty > 0 ? "text-[#3F7D58]" : "text-[#26302B]"}`} style={{ fontFamily: "Outfit, sans-serif" }}>
+                                Talla {s.name}
+                              </span>
+                              <span className="text-[10px] text-[#9DAAA2] font-semibold">
+                                {qty > 0 ? `${qty} pzas` : "0 pzas"}
+                              </span>
+                            </div>
+
+                            {/* Controles de Stock */}
                             <div className="flex items-center gap-1.5 sm:gap-2">
                               <button
                                 type="button"
@@ -966,9 +1117,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                                     },
                                   }))
                                 }
-                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
+                                className="w-7 h-7 rounded-full border border-[#DDD9D0] bg-white text-[#556B5D] flex items-center justify-center hover:bg-[#F0EDE8] transition-colors cursor-pointer font-bold"
                               >
-                                <Minus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                <Minus className="w-3 h-3" />
                               </button>
                               <input
                                 type="number"
@@ -983,7 +1134,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                                     },
                                   }))
                                 }
-                                className={`w-10 sm:w-12 text-center text-base sm:text-lg font-extrabold rounded-xl border py-1 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"}`}
+                                className={`w-10 sm:w-11 text-center text-sm sm:text-base font-extrabold rounded-xl border py-0.5 focus:outline-none focus:ring-2 focus:ring-[#556B5D]/30 transition-colors ${
+                                  qty > 0 ? "text-[#3F7D58] border-[#3F7D58] bg-white" : "text-[#26302B] border-[#DDD9D0] bg-white"
+                                }`}
                               />
                               <button
                                 type="button"
@@ -996,14 +1149,43 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                                     },
                                   }))
                                 }
-                                className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
+                                className="w-7 h-7 rounded-full border border-[#3F7D58] bg-[#3F7D58] text-white flex items-center justify-center hover:bg-[#2F6348] transition-colors cursor-pointer"
                               >
-                                <Plus className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                                <Plus className="w-3 h-3" />
                               </button>
                             </div>
-                            <span className="text-[10px] text-[#9DAAA2]">
-                              {qty > 0 ? `${qty} pzas` : "Sin stock"}
-                            </span>
+
+                            {/* Campo SKU Editable */}
+                            {skuKey && (
+                              <div className="w-full pt-2 border-t border-[#DDD9D0]/70 flex flex-col items-start gap-1">
+                                <div className="flex items-center justify-between w-full">
+                                  <span className="text-[9px] font-bold text-[#6B7A71] uppercase tracking-wider flex items-center gap-1">
+                                    <Barcode className="w-3 h-3 text-[#3F7D58]" /> SKU
+                                  </span>
+                                  {isConflict && (
+                                    <span className="text-[9px] text-[#B85450] font-extrabold animate-pulse">
+                                      ¡Ya existe!
+                                    </span>
+                                  )}
+                                </div>
+                                <input
+                                  type="text"
+                                  value={currentSku}
+                                  onChange={(e) => {
+                                    const val = e.target.value.toUpperCase().replace(/\s+/g, "-");
+                                    setCustomSkus((prev) => ({ ...prev, [skuKey]: val }));
+                                    if (highlightedSkuError) setHighlightedSkuError(null);
+                                  }}
+                                  placeholder="SKU"
+                                  className={`w-full text-center text-[10px] font-mono font-bold rounded-lg border py-1 px-1 focus:outline-none transition-colors ${
+                                    isConflict
+                                      ? "border-[#B85450] bg-white text-[#B85450] ring-2 ring-[#B85450]/40"
+                                      : "border-[#DDD9D0] bg-white text-[#26302B] focus:border-[#3F7D58] focus:ring-1 focus:ring-[#3F7D58]"
+                                  }`}
+                                  title="Código SKU de la prenda (editable)"
+                                />
+                              </div>
+                            )}
                           </div>
                         );
                       })}

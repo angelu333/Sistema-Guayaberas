@@ -288,13 +288,33 @@ export const productsService = {
       is_active: true,
     }));
 
+    // 2.5 Verificar si alguno de los SKUs ya existe en variantes_producto del tenant
+    const skusToCheck = variantRows.map((r) => r.sku);
+    if (skusToCheck.length > 0) {
+      const { data: existingDbSkus } = await supabase
+        .from("variantes_producto")
+        .select("sku")
+        .eq("tenant_id", tenantId)
+        .in("sku", skusToCheck);
+
+      if (existingDbSkus && existingDbSkus.length > 0) {
+        const dupSkus = existingDbSkus.map((s: any) => s.sku).join(", ");
+        throw new Error(`El código SKU "${dupSkus}" ya existe en su inventario. Por favor modifícalo en la lista.`);
+      }
+    }
+
     const { error: variantError } = await supabase
       .from("variantes_producto")
       .insert(variantRows);
 
     if (variantError) {
       if (variantError.code === "23505") {
-        throw new Error("Uno de los SKU especificados ya existe en su inventario.");
+        const match = variantError.details?.match(/\([^,]+,\s*([^)]+)\)/) || variantError.message?.match(/sku[=:]\s*([^\s,)]+)/i);
+        const skuFound = match ? match[1]?.trim() : "";
+        if (skuFound) {
+          throw new Error(`El código SKU "${skuFound}" ya existe en su inventario. Por favor cámbialo.`);
+        }
+        throw new Error("Uno de los SKU especificados ya existe en su inventario. Por favor cámbialo.");
       }
       throw new Error(`Error al crear las variantes: ${variantError.message}`);
     }
