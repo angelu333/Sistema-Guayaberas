@@ -548,6 +548,63 @@ CREATE TRIGGER trg_update_stock_on_movement
   BEFORE INSERT ON public.movimientos_inventario
   FOR EACH ROW EXECUTE FUNCTION public.update_stock_on_movement();
 
+-- Función y trigger: Al registrar una nueva empresa (tenant),
+-- inicializar automáticamente su sucursal Matriz, categoría, tipos de manga, tallas y colores base.
+CREATE OR REPLACE FUNCTION public.initialize_tenant_defaults()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- 1. Crear Sucursal Matriz
+  INSERT INTO public.ubicaciones (tenant_id, name, description, is_active)
+  VALUES (NEW.id, 'Sucursal Matriz', 'Tienda principal y bodega', true)
+  ON CONFLICT DO NOTHING;
+
+  -- 2. Crear Categoría inicial
+  INSERT INTO public.categorias (tenant_id, name, is_active)
+  VALUES (NEW.id, 'Guayaberas', true)
+  ON CONFLICT DO NOTHING;
+
+  -- 3. Crear Tipos de Manga estándar
+  INSERT INTO public.tipos_manga (tenant_id, name, is_active) VALUES
+    (NEW.id, 'Manga Corta', true),
+    (NEW.id, 'Manga Larga', true)
+  ON CONFLICT DO NOTHING;
+
+  -- 4. Crear Tallas estándar de Guayaberas
+  INSERT INTO public.tallas (tenant_id, name, sort_order, is_active) VALUES
+    (NEW.id, '36', 1, true),
+    (NEW.id, '38', 2, true),
+    (NEW.id, '40', 3, true),
+    (NEW.id, '42', 4, true),
+    (NEW.id, '44', 5, true),
+    (NEW.id, '46', 6, true),
+    (NEW.id, '48', 7, true),
+    (NEW.id, 'CH', 8, true),
+    (NEW.id, 'M',  9, true),
+    (NEW.id, 'G',  10, true),
+    (NEW.id, 'XL', 11, true),
+    (NEW.id, 'XXL',12, true)
+  ON CONFLICT DO NOTHING;
+
+  -- 5. Crear Colores estándar
+  INSERT INTO public.colores (tenant_id, name, hex_code, is_active) VALUES
+    (NEW.id, 'Blanco', '#FFFFFF', true),
+    (NEW.id, 'Hueso', '#F5F5DC', true),
+    (NEW.id, 'Negro', '#1C1C1C', true),
+    (NEW.id, 'Azul Cielo', '#87CEEB', true),
+    (NEW.id, 'Azul Marino', '#000080', true),
+    (NEW.id, 'Beige', '#D4C4A8', true),
+    (NEW.id, 'Palo de Rosa', '#DDA0DD', true)
+  ON CONFLICT DO NOTHING;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS trg_initialize_tenant_defaults ON public.tenants;
+CREATE TRIGGER trg_initialize_tenant_defaults
+  AFTER INSERT ON public.tenants
+  FOR EACH ROW EXECUTE FUNCTION public.initialize_tenant_defaults();
+
 -- ==============================================================================
 -- 14. POLÍTICAS DE SEGURIDAD RLS (Row Level Security)
 -- ==============================================================================
