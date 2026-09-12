@@ -3,7 +3,12 @@ import { createBrowserClient } from "@supabase/ssr";
 
 function getCleanUrl(): string {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  return url.trim().replace(/^["']|["']$/g, "").replace(/\/+$/, "");
+  return url
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .replace(/\/rest\/v1\/?$/i, "")
+    .replace(/\/auth\/v1\/?$/i, "")
+    .replace(/\/+$/, "");
 }
 
 function getCleanKey(): string {
