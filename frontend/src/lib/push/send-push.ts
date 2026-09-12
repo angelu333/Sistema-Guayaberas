@@ -6,17 +6,37 @@
 import webpush from "web-push";
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// VAPID Keys con fallbacks seguros para evitar errores en build
+const VAPID_PUBLIC_KEY =
+  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ||
+  "BBylFNo0hz8Tkk03DcugzOn8NDU-Ci4nW67Pp4C6k6Dy2m4_NnBzRn_usOj2hqJTcLCJE7AHn1gWxDB7jafn1oY";
 
-// Configurar VAPID una sola vez al cargar el módulo
-webpush.setVapidDetails(
-  "mailto:admin@guayaberas.com",
-  process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY!,
-  process.env.VAPID_PRIVATE_KEY!
-);
+const VAPID_PRIVATE_KEY =
+  process.env.VAPID_PRIVATE_KEY ||
+  "RWGqyabV-8TRzFpGpyF3wamMvbN18_jKbnVT4crbph0";
+
+let vapidConfigured = false;
+function ensureVapidConfigured() {
+  if (!vapidConfigured && VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+    try {
+      webpush.setVapidDetails(
+        "mailto:admin@guayaberas.com",
+        VAPID_PUBLIC_KEY,
+        VAPID_PRIVATE_KEY
+      );
+      vapidConfigured = true;
+    } catch (err) {
+      console.warn("[Push] Error al inicializar VAPID:", err);
+    }
+  }
+}
+
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 export interface PushPayload {
   title: string;
@@ -37,6 +57,13 @@ export async function sendPushToTenant(
   tenantId: string,
   payload: PushPayload
 ): Promise<{ sent: number; failed: number }> {
+  ensureVapidConfigured();
+  const supabaseAdmin = getSupabaseAdmin();
+  if (!supabaseAdmin) {
+    console.warn("[Push] Supabase credentials no disponibles.");
+    return { sent: 0, failed: 0 };
+  }
+
   const { data: subs, error } = await supabaseAdmin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth")
