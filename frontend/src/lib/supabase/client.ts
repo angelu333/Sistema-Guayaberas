@@ -11,6 +11,8 @@ function getCleanKey(): string {
   return key.trim().replace(/^["']|["']$/g, "");
 }
 
+let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
+
 export function createClient() {
   if (clientInstance) return clientInstance;
 
