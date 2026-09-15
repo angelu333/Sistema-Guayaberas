@@ -40,6 +40,28 @@ export interface ProductFilters {
 
 export const productsService = {
   /**
+   * Obtiene todos los SKUs registrados en el inventario del tenant
+   */
+  async getExistingSkus(tenantId: string): Promise<Set<string>> {
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from("variantes_producto")
+        .select("sku")
+        .eq("tenant_id", tenantId);
+
+      if (error || !data) return new Set();
+      return new Set(
+        data
+          .map((row: any) => (typeof row.sku === "string" ? row.sku.toUpperCase().trim() : ""))
+          .filter(Boolean)
+      );
+    } catch {
+      return new Set();
+    }
+  },
+
+  /**
    * Obtiene todos los productos del tenant activo con sus variantes
    */
   async getProducts(filters?: ProductFilters): Promise<ProductVariant[]> {

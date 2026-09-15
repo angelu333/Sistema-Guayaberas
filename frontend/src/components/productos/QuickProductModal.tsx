@@ -88,11 +88,11 @@ function buildSKU(
   if (existingSkus) {
     let sku = baseSku;
     let counter = 2;
-    while (existingSkus.has(sku)) {
+    while (existingSkus.has(sku.toUpperCase().trim())) {
       sku = `${baseSku}-${counter}`;
       counter++;
     }
-    existingSkus.add(sku);
+    existingSkus.add(sku.toUpperCase().trim());
     return sku;
   }
 
@@ -149,7 +149,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   const [activeColorStep2, setActiveColorStep2] = useState<string>("");
   // SKUs personalizados por variante: { [`${colorId}_${sleeveId}_${sizeId}`]: string }
   const [customSkus, setCustomSkus] = useState<Record<string, string>>({});
-  const [highlightedSkuError, setHighlightedSkuError] = useState<string | null>(null);
+  const [highlightedSkuErrors, setHighlightedSkuErrors] = useState<Set<string>>(new Set());
+  const [blockedSkus, setBlockedSkus] = useState<Set<string>>(new Set());
+  const [isRegeneratingSkus, setIsRegeneratingSkus] = useState(false);
 
   // Estado general
   const [loading, setLoading] = useState(false);
@@ -202,7 +204,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setActiveSleeveStep2("");
     setActiveColorStep2("");
     setCustomSkus({});
-    setHighlightedSkuError(null);
+    setHighlightedSkuErrors(new Set());
+    setBlockedSkus(new Set());
+    setIsRegeneratingSkus(false);
     setNewColorName("");
     setNewSizeName("");
     setNewCategoryName("");
@@ -334,9 +338,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   };
 
   // Avanzar del Paso 1 al Paso 2
-  const handleGoToStep2 = () => {
+  const handleGoToStep2 = async () => {
     setError(null);
-    setHighlightedSkuError(null);
+    setHighlightedSkuErrors(new Set());
     if (!name.trim()) { setError("El nombre del modelo es requerido."); return; }
     if (selectedColors.size === 0) { setError("Selecciona al menos un color."); return; }
     if (selectedSizes.size === 0) { setError("Selecciona al menos una talla."); return; }
@@ -356,9 +360,15 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     });
     setStockBySleeveAndSize(nextStock);
 
+    // Consultar SKUs existentes en la BD para evitar colisiones desde el inicio
+    let dbSkus = new Set<string>();
+    if (session?.tenantId) {
+      dbSkus = await productsService.getExistingSkus(session.tenantId);
+    }
+    const generatedSkus = new Set<string>([...Array.from(dbSkus), ...Array.from(blockedSkus)]);
+
     // Inicializar SKUs sugeridos para todas las combinaciones
     const nextSkus: Record<string, string> = { ...customSkus };
-    const generatedSkus = new Set<string>();
 
     // Registrar SKUs que el usuario ya haya modificado a mano
     Object.values(nextSkus).forEach((s) => {
@@ -388,31 +398,42 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setStep(2);
   };
 
-  // Regenerar todos los códigos SKU con la nomenclatura automática
-  const handleRegenerateSkus = () => {
-    const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
-    const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
-    const selectedColorArr = allColors.filter((c) => selectedColors.has(c.id));
+  // Regenerar todos los códigos SKU con la nomenclatura automática garantizando unicidad contra BD
+  const handleRegenerateSkus = async () => {
+    setIsRegeneratingSkus(true);
+    try {
+      let dbSkus = new Set<string>();
+      if (session?.tenantId) {
+        dbSkus = await productsService.getExistingSkus(session.tenantId);
+      }
+      const generatedSkus = new Set<string>([...Array.from(dbSkus), ...Array.from(blockedSkus)]);
 
-    const newSkus: Record<string, string> = {};
-    const generatedSkus = new Set<string>();
+      const selectedSleeveArr = allSleeves.filter((sl) => selectedSleeves.has(sl.id));
+      const selectedSizeArr = allSizes.filter((s) => selectedSizes.has(s.id));
+      const selectedColorArr = allColors.filter((c) => selectedColors.has(c.id));
 
-    for (const color of selectedColorArr) {
-      for (const sleeve of selectedSleeveArr) {
-        for (const size of selectedSizeArr) {
-          const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
-          newSkus[skuKey] = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
+      const newSkus: Record<string, string> = {};
+
+      for (const color of selectedColorArr) {
+        for (const sleeve of selectedSleeveArr) {
+          for (const size of selectedSizeArr) {
+            const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
+            newSkus[skuKey] = buildSKU(name, color.name, size.name, sleeve.name, generatedSkus);
+          }
         }
       }
+      setCustomSkus(newSkus);
+      setHighlightedSkuErrors(new Set());
+      setError(null);
+    } finally {
+      setIsRegeneratingSkus(false);
     }
-    setCustomSkus(newSkus);
-    setHighlightedSkuError(null);
   };
 
   // Guardar todo
   const handleSubmit = async () => {
     setError(null);
-    setHighlightedSkuError(null);
+    setHighlightedSkuErrors(new Set());
     if (!session?.tenantId) { setError("No se encontró una empresa activa."); return; }
 
     setLoading(true);
@@ -440,7 +461,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
             }
 
             if (usedSkus.has(sku)) {
-              setHighlightedSkuError(sku);
+              setHighlightedSkuErrors(new Set([sku]));
               throw new Error(`El código SKU "${sku}" está repetido en el formulario. Cada prenda debe tener un SKU único.`);
             }
             usedSkus.add(sku);
@@ -472,9 +493,18 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     } catch (e: unknown) {
       if (e instanceof Error) {
         setError(e.message);
+        // Extraer SKUs en conflicto del mensaje de error
         const match = e.message.match(/["']([^"']+)["']/);
         if (match) {
-          setHighlightedSkuError(match[1]);
+          const conflicting = match[1].split(",").map((s) => s.trim().toUpperCase()).filter(Boolean);
+          if (conflicting.length > 0) {
+            setHighlightedSkuErrors(new Set(conflicting));
+            setBlockedSkus((prev) => {
+              const next = new Set(prev);
+              conflicting.forEach((s) => next.add(s));
+              return next;
+            });
+          }
         }
       } else {
         setError("Error al guardar el producto.");
@@ -1060,9 +1090,22 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-[#FAEAEA] border border-[#B85450]/30 rounded-xl text-xs text-[#B85450] flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  {error}
+                <div className="mb-4 p-3.5 bg-[#FAEAEA] border border-[#B85450]/30 rounded-xl text-xs text-[#B85450] flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-[#B85450]" />
+                    <span>{error}</span>
+                  </div>
+                  {highlightedSkuErrors.size > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRegenerateSkus}
+                      disabled={isRegeneratingSkus}
+                      className="shrink-0 text-xs font-bold text-white bg-[#B85450] hover:bg-[#9E3E3A] px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-xs cursor-pointer self-end sm:self-auto"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${isRegeneratingSkus ? "animate-spin" : ""}`} />
+                      {isRegeneratingSkus ? "Generando..." : "Generar nuevos SKUs únicos"}
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1173,11 +1216,12 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                         <button
                           type="button"
                           onClick={handleRegenerateSkus}
-                          className="text-[11px] font-bold text-[#556B5D] hover:text-[#26302B] cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-[#DDD9D0] hover:border-[#556B5D] flex items-center gap-1 shadow-xs"
-                          title="Restablecer todos los SKUs al formato automático por defecto"
+                          disabled={isRegeneratingSkus}
+                          className="text-[11px] font-bold text-[#556B5D] hover:text-[#26302B] cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-[#DDD9D0] hover:border-[#556B5D] flex items-center gap-1 shadow-xs transition-all disabled:opacity-50"
+                          title="Restablecer todos los SKUs al formato automático por defecto evitando duplicados"
                         >
-                          <RefreshCw className="w-3 h-3 text-[#3F7D58]" />
-                          Restablecer SKUs
+                          <RefreshCw className={`w-3 h-3 text-[#3F7D58] ${isRegeneratingSkus ? "animate-spin" : ""}`} />
+                          {isRegeneratingSkus ? "Generando..." : "Restablecer SKUs"}
                         </button>
 
                         {/* Botón copiar a otras mangas */}
@@ -1211,9 +1255,8 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                         const skuKey = currentColor ? `${currentColor.id}_${currentSleeve.id}_${s.id}` : "";
                         const currentSku = skuKey ? (customSkus[skuKey] ?? "") : "";
                         const isConflict = Boolean(
-                          highlightedSkuError &&
                           currentSku &&
-                          currentSku.toUpperCase().trim() === highlightedSkuError.toUpperCase().trim()
+                          highlightedSkuErrors.has(currentSku.toUpperCase().trim())
                         );
 
                         return (
@@ -1306,7 +1349,7 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                                   onChange={(e) => {
                                     const val = e.target.value.toUpperCase().replace(/\s+/g, "-");
                                     setCustomSkus((prev) => ({ ...prev, [skuKey]: val }));
-                                    if (highlightedSkuError) setHighlightedSkuError(null);
+                                    if (highlightedSkuErrors.size > 0) setHighlightedSkuErrors(new Set());
                                   }}
                                   placeholder="SKU"
                                   className={`w-full text-center text-[10px] font-mono font-bold rounded-lg border py-1 px-1 focus:outline-none transition-colors ${
