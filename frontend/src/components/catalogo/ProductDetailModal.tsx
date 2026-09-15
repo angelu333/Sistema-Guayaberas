@@ -463,20 +463,45 @@ export function ProductDetailModal({
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {availableSizes.map((size) => (
-                    <button
-                      key={size}
-                      onClick={() => setSelectedSize(size)}
-                      className="min-w-[48px] h-11 px-3 text-sm font-extrabold rounded-xl border-2 transition-all cursor-pointer"
-                      style={
-                        currentSize === size
-                          ? { borderColor: "#556B5D", backgroundColor: "#556B5D", color: "white" }
-                          : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B" }
-                      }
-                    >
-                      {size}
-                    </button>
-                  ))}
+                  {availableSizes.map((size) => {
+                    const variantForSize = product.variants.find(
+                      (v) =>
+                        (!currentColor || v.colorName === currentColor) &&
+                        (!currentSleeve || v.sleeveTypeName === currentSleeve) &&
+                        v.sizeName === size
+                    );
+                    const isSoldOut = (variantForSize?.stock ?? 0) <= 0;
+                    const isSelected = currentSize === size;
+                    return (
+                      <button
+                        key={size}
+                        onClick={() => { if (!isSoldOut) setSelectedSize(size); }}
+                        disabled={isSoldOut}
+                        title={isSoldOut ? "Sin existencias" : undefined}
+                        className="min-w-[48px] h-12 px-3 text-sm font-extrabold rounded-xl border-2 transition-all flex flex-col items-center justify-center gap-0.5"
+                        style={
+                          isSoldOut
+                            ? {
+                                borderColor: "#DDD9D0",
+                                backgroundColor: "#F5F3F0",
+                                color: "#B8B0A8",
+                                cursor: "not-allowed",
+                                opacity: 0.55,
+                              }
+                            : isSelected
+                            ? { borderColor: "#556B5D", backgroundColor: "#556B5D", color: "white", cursor: "pointer" }
+                            : { borderColor: "#E4DDD1", backgroundColor: "white", color: "#26302B", cursor: "pointer" }
+                        }
+                      >
+                        <span>{size}</span>
+                        {isSoldOut && (
+                          <span className="text-[8px] font-bold uppercase tracking-wide" style={{ color: "#B8B0A8" }}>
+                            Agotada
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
 

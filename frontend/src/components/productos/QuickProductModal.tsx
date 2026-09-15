@@ -121,6 +121,12 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
   const [selectedSleeves, setSelectedSleeves] = useState<Set<string>>(new Set());
   // Precio por manga: { [sleeveId]: number }
   const [priceBySleve, setPriceBySleeve] = useState<Record<string, number>>({});
+  // Precio especial por talla: { [sleeveId]: { [sizeId]: number } } (Opción A: sobrescribe precio base de manga)
+  const [priceBySleeveAndSize, setPriceBySleeveAndSize] = useState<Record<string, Record<string, number>>>({});
+  // Mostrar sección de precio por talla
+  const [showPriceBySize, setShowPriceBySize] = useState(false);
+  // Manga activa en el panel de precios por talla
+  const [activeSleevePriceTab, setActiveSleevePriceTab] = useState<string>("");
 
   // Fotos del modelo (Galería con portada y múltiples tomas)
   const [images, setImages] = useState<{ url: string; isPrimary: boolean }[]>([]);
@@ -182,6 +188,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
     setSelectedSizes(new Set());
     setSelectedSleeves(new Set());
     setPriceBySleeve({});
+    setPriceBySleeveAndSize({});
+    setShowPriceBySize(false);
+    setActiveSleevePriceTab("");
     setImages([]);
     setProcessingPhotos(false);
     setError(null);
@@ -418,7 +427,9 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
       for (const color of colorArr) {
         for (const sleeve of sleeveArr) {
           for (const size of sizeArr) {
-            const salePrice = priceBySleve[sleeve.id] ?? 750;
+            // Opción A: precio especial por talla sobrescribe el precio base de manga
+            const basePriceBySleeve = priceBySleve[sleeve.id] ?? 750;
+            const salePrice = priceBySleeveAndSize[sleeve.id]?.[size.id] ?? basePriceBySleeve;
             const stockForSize = stockBySleeveAndSize[sleeve.id]?.[size.id] ?? 0;
             const skuKey = `${color.id}_${sleeve.id}_${size.id}`;
             const skuRaw = customSkus[skuKey] || buildSKU(name, color.name, size.name, sleeve.name);
@@ -844,6 +855,124 @@ export function QuickProductModal({ isOpen, onClose, onSuccess }: QuickProductMo
                     </div>
                   )}
                 </div>
+
+                {/* PRECIO DIFERENCIADO POR TALLA (Opción A: expandible) */}
+                {selectedSleeveArr.length > 0 && selectedSizeArr.length > 0 && (
+                  <div className="border border-[#DDD9D0] rounded-xl overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowPriceBySize((v) => !v);
+                        if (!activeSleevePriceTab && selectedSleeveArr.length > 0) {
+                          setActiveSleevePriceTab(selectedSleeveArr[0].id);
+                        }
+                      }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 bg-[#F8F6F1] hover:bg-[#F0EDE8] transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">💲</span>
+                        <span className="text-xs font-bold text-[#26302B]">¿Alguna talla tiene precio diferente?</span>
+                        {Object.values(priceBySleeveAndSize).some(sizes => Object.keys(sizes).length > 0) && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-[#C49A5A] text-white rounded-full font-bold">Activo</span>
+                        )}
+                      </div>
+                      <span className="text-[#6B7A71] text-xs font-bold">{showPriceBySize ? "▲ Ocultar" : "▼ Configurar"}</span>
+                    </button>
+
+                    {showPriceBySize && (
+                      <div className="p-3 space-y-3">
+                        <p className="text-[11px] text-[#6B7A71]">
+                          Deja el campo vacío para usar el precio base de la manga. Solo rellena las tallas que cuestan diferente.
+                        </p>
+
+                        {/* Tabs por manga si hay más de 1 */}
+                        {selectedSleeveArr.length > 1 && (
+                          <div className="flex gap-1.5">
+                            {selectedSleeveArr.map((sl) => (
+                              <button
+                                key={sl.id}
+                                type="button"
+                                onClick={() => setActiveSleevePriceTab(sl.id)}
+                                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  activeSleevePriceTab === sl.id
+                                    ? "bg-[#26302B] text-white"
+                                    : "bg-[#F0EDE8] text-[#6B7A71] hover:bg-[#E7E3DA]"
+                                }`}
+                              >
+                                {sl.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Cuadrícula de tallas con precio */}
+                        {(() => {
+                          const activeSl = selectedSleeveArr.find(
+                            (sl) => sl.id === (activeSleevePriceTab || selectedSleeveArr[0]?.id)
+                          );
+                          if (!activeSl) return null;
+                          const basePriceForSleeve = priceBySleve[activeSl.id] ?? 750;
+                          return (
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                              {selectedSizeArr.map((sz) => {
+                                const currentVal = priceBySleeveAndSize[activeSl.id]?.[sz.id];
+                                return (
+                                  <div key={sz.id} className="flex items-center gap-1.5 bg-white border border-[#DDD9D0] rounded-xl px-2.5 py-2">
+                                    <span className="text-xs font-extrabold text-[#26302B] w-8 shrink-0 text-center">{sz.name}</span>
+                                    <span className="text-xs text-[#9DAAA2] shrink-0">$</span>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      placeholder={String(basePriceForSleeve)}
+                                      value={currentVal !== undefined ? currentVal : ""}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setPriceBySleeveAndSize((prev) => {
+                                          const next = { ...prev };
+                                          if (!next[activeSl.id]) next[activeSl.id] = {};
+                                          if (val === "" || val === "0") {
+                                            // Vacío = usar precio base de manga
+                                            const updated = { ...next[activeSl.id] };
+                                            delete updated[sz.id];
+                                            next[activeSl.id] = updated;
+                                          } else {
+                                            next[activeSl.id] = { ...next[activeSl.id], [sz.id]: Number(val) };
+                                          }
+                                          return next;
+                                        });
+                                      }}
+                                      className="flex-1 w-0 min-w-0 text-xs font-bold text-[#26302B] bg-transparent focus:outline-none text-right"
+                                    />
+                                    {currentVal !== undefined && currentVal !== basePriceForSleeve && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPriceBySleeveAndSize((prev) => {
+                                            const next = { ...prev };
+                                            if (next[activeSl.id]) {
+                                              const updated = { ...next[activeSl.id] };
+                                              delete updated[sz.id];
+                                              next[activeSl.id] = updated;
+                                            }
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-[#B85450] text-[10px] font-bold cursor-pointer shrink-0 hover:underline"
+                                        title="Resetear al precio base"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </div>
             </div>

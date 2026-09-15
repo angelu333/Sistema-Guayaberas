@@ -317,29 +317,40 @@ export function POSVariantSelectModal({
                   );
                   const vLocal = (v as any)?.localStock ?? (v?.totalStock ?? 0);
                   const vOther = (v as any)?.otherStock ?? 0;
+                  const isTotallyOutOfStock = vLocal <= 0 && vOther <= 0;
 
                   return (
                     <button
                       key={sz}
                       type="button"
-                      onClick={() => setSelectedSize(sz)}
-                      className={`min-w-[54px] h-11 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all cursor-pointer ${
-                        isSelected
+                      onClick={() => { if (!isTotallyOutOfStock) setSelectedSize(sz); }}
+                      disabled={isTotallyOutOfStock}
+                      title={isTotallyOutOfStock ? "Sin existencias" : undefined}
+                      className={`min-w-[54px] h-11 px-3 text-xs font-bold rounded-xl border flex flex-col items-center justify-center transition-all ${
+                        isTotallyOutOfStock
+                          ? "cursor-not-allowed opacity-50"
+                          : "cursor-pointer"
+                      } ${
+                        isSelected && !isTotallyOutOfStock
                           ? "bg-[#556B5D] text-white border-[#556B5D] shadow-md scale-105"
+                          : isTotallyOutOfStock
+                          ? "bg-[#F5F3F0] text-[#B8B0A8] border-[#DDD9D0]"
                           : "bg-white text-[#26302B] border-[#DDD9D0] hover:border-[#8FA393]"
                       }`}
                     >
                       <span>{sz}</span>
                       <span className={`text-[9px] ${
-                        isSelected
+                        isSelected && !isTotallyOutOfStock
                           ? "text-[#C49A5A]"
+                          : isTotallyOutOfStock
+                          ? "text-[#B8B0A8] font-bold"
                           : vLocal > 0
                           ? "text-[#3F7D58] font-bold"
                           : vOther > 0
                           ? "text-[#C49A5A]"
                           : "text-[#8FA393]"
                       }`}>
-                        {vLocal > 0 ? `${vLocal} pz` : vOther > 0 ? `+${vOther}` : "0 pz"}
+                        {isTotallyOutOfStock ? "Agotada" : vLocal > 0 ? `${vLocal} pz` : vOther > 0 ? `+${vOther}` : "0 pz"}
                       </span>
                     </button>
                   );
