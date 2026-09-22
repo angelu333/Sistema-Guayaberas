@@ -111,10 +111,10 @@ export const reportsService = {
       return [];
     }
 
-    const vIds = variants.map((v: any) => v.id);
-    const { data: stockData } = vIds.length > 0
-      ? await supabase.from("existencias").select("variant_id, quantity").in("variant_id", vIds)
-      : { data: [] };
+    const { data: stockData } = await supabase
+      .from("existencias")
+      .select("variant_id, quantity")
+      .eq("tenant_id", tenantId);
 
     const stockMap = new Map<string, number>();
     (stockData || []).forEach((st: any) => {

@@ -188,12 +188,11 @@ export const dashboardService = {
       .eq("tenant_id", tenantId)
       .eq("is_active", true);
 
-    const vIds = (variantsData || []).map((v: any) => v.id);
-    let stockQuery = supabase.from("existencias").select("variant_id, quantity, location_id").in("variant_id", vIds);
+    let stockQuery = supabase.from("existencias").select("variant_id, quantity, location_id").eq("tenant_id", tenantId);
     if (locationId) {
       stockQuery = stockQuery.eq("location_id", locationId);
     }
-    const { data: stockData } = vIds.length > 0 ? await stockQuery : { data: [] };
+    const { data: stockData } = await stockQuery;
 
     const stockMap = new Map<string, number>();
     (stockData || []).forEach((st: any) => {

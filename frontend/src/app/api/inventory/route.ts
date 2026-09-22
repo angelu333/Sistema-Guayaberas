@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
     const locations = locationsRes.data || [];
     const vIds = variants.map((v: any) => v.id);
 
-    // Obtener existencias
+    // Obtener existencias directamente por tenant_id para no exceder límites de URL
     let stockQuery = supabaseAdmin
       .from("existencias")
       .select(`
@@ -91,7 +91,7 @@ export async function GET(req: NextRequest) {
         updated_at,
         ubicaciones(name)
       `)
-      .in("variant_id", vIds.length > 0 ? vIds : ["00000000-0000-0000-0000-000000000000"]);
+      .eq("tenant_id", tenantId);
 
     if (locationId) {
       stockQuery = stockQuery.eq("location_id", locationId);

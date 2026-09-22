@@ -241,17 +241,31 @@ export const publicCatalogService = {
     const vIds = (data || []).map((v: any) => v.id);
 
     // Consultar imágenes de variantes y existencias en ráfaga paralela en lote
-    const [varImgsRes, stockRes] = await Promise.all([
-      vIds.length > 0
-        ? supabase.from("imagenes_variante").select("id, variant_id, url, sort_order, is_primary").in("variant_id", vIds)
-        : Promise.resolve({ data: [] }),
-      vIds.length > 0
-        ? supabase.from("existencias").select("variant_id, quantity").in("variant_id", vIds)
-        : Promise.resolve({ data: [] }),
+    const fetchVariantImages = async () => {
+      if (vIds.length === 0) return [];
+      const chunkSize = 100;
+      const allImgs: any[] = [];
+      for (let i = 0; i < vIds.length; i += chunkSize) {
+        const chunk = vIds.slice(i, i + chunkSize);
+        const { data: chunkImgs } = await supabase
+          .from("imagenes_variante")
+          .select("id, variant_id, url, sort_order, is_primary")
+          .in("variant_id", chunk);
+        if (chunkImgs) allImgs.push(...chunkImgs);
+      }
+      return allImgs;
+    };
+
+    const [varImgsData, stockRes] = await Promise.all([
+      fetchVariantImages(),
+      supabase
+        .from("existencias")
+        .select("variant_id, quantity")
+        .eq("tenant_id", tenantId),
     ]);
 
     const varImgsMap = new Map<string, any[]>();
-    (varImgsRes.data || []).forEach((img: any) => {
+    (varImgsData || []).forEach((img: any) => {
       if (!varImgsMap.has(img.variant_id)) varImgsMap.set(img.variant_id, []);
       varImgsMap.get(img.variant_id)!.push(img);
     });

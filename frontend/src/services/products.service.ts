@@ -145,17 +145,49 @@ export const productsService = {
     const rawVariantIds = (data || []).map((item: any) => item.id);
 
     // Ráfaga paralela ultra rápida en lote para imágenes de variante y existencias por sucursal
-    const [varImgsRes, stockRes] = await Promise.all([
-      rawVariantIds.length > 0
-        ? supabase.from("imagenes_variante").select("id, variant_id, url, sort_order, is_primary").in("variant_id", rawVariantIds)
-        : Promise.resolve({ data: [] }),
-      rawVariantIds.length > 0
-        ? supabase.from("existencias").select("variant_id, location_id, quantity, ubicaciones(name)").in("variant_id", rawVariantIds)
-        : Promise.resolve({ data: [] }),
+    const fetchVariantImages = async () => {
+      if (rawVariantIds.length === 0) return [];
+      const chunkSize = 100;
+      const allImgs: any[] = [];
+      for (let i = 0; i < rawVariantIds.length; i += chunkSize) {
+        const chunk = rawVariantIds.slice(i, i + chunkSize);
+        const { data: chunkImgs } = await supabase
+          .from("imagenes_variante")
+          .select("id, variant_id, url, sort_order, is_primary")
+          .in("variant_id", chunk);
+        if (chunkImgs) allImgs.push(...chunkImgs);
+      }
+      return allImgs;
+    };
+
+    const fetchStock = async () => {
+      if (filters?.tenantId) {
+        return supabase
+          .from("existencias")
+          .select("variant_id, location_id, quantity, ubicaciones(name)")
+          .eq("tenant_id", filters.tenantId);
+      }
+      if (rawVariantIds.length === 0) return { data: [] };
+      const chunkSize = 100;
+      const allStock: any[] = [];
+      for (let i = 0; i < rawVariantIds.length; i += chunkSize) {
+        const chunk = rawVariantIds.slice(i, i + chunkSize);
+        const { data: chunkStock } = await supabase
+          .from("existencias")
+          .select("variant_id, location_id, quantity, ubicaciones(name)")
+          .in("variant_id", chunk);
+        if (chunkStock) allStock.push(...chunkStock);
+      }
+      return { data: allStock };
+    };
+
+    const [varImgsData, stockRes] = await Promise.all([
+      fetchVariantImages(),
+      fetchStock(),
     ]);
 
     const varImgsMap = new Map<string, any[]>();
-    (varImgsRes.data || []).forEach((img: any) => {
+    (varImgsData || []).forEach((img: any) => {
       if (!varImgsMap.has(img.variant_id)) varImgsMap.set(img.variant_id, []);
       varImgsMap.get(img.variant_id)!.push(img);
     });

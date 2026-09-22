@@ -82,23 +82,31 @@ export async function GET(req: NextRequest) {
     const rawVariantIds = (rawVariants || []).map((item: any) => item.id);
 
     // 2. Consultas en paralelo para imágenes de variante y existencias
-    const [varImgsRes, stockRes] = await Promise.all([
-      rawVariantIds.length > 0
-        ? supabaseAdmin
-            .from("imagenes_variante")
-            .select("id, variant_id, url, sort_order, is_primary")
-            .in("variant_id", rawVariantIds)
-        : Promise.resolve({ data: [] }),
-      rawVariantIds.length > 0
-        ? supabaseAdmin
-            .from("existencias")
-            .select("variant_id, location_id, quantity, ubicaciones(name)")
-            .in("variant_id", rawVariantIds)
-        : Promise.resolve({ data: [] }),
+    const fetchVariantImages = async () => {
+      if (rawVariantIds.length === 0) return [];
+      const chunkSize = 100;
+      const allImgs: any[] = [];
+      for (let i = 0; i < rawVariantIds.length; i += chunkSize) {
+        const chunk = rawVariantIds.slice(i, i + chunkSize);
+        const { data } = await supabaseAdmin
+          .from("imagenes_variante")
+          .select("id, variant_id, url, sort_order, is_primary")
+          .in("variant_id", chunk);
+        if (data) allImgs.push(...data);
+      }
+      return allImgs;
+    };
+
+    const [varImgsData, stockRes] = await Promise.all([
+      fetchVariantImages(),
+      supabaseAdmin
+        .from("existencias")
+        .select("variant_id, location_id, quantity, ubicaciones(name)")
+        .eq("tenant_id", tenantId),
     ]);
 
     const varImgsMap = new Map<string, any[]>();
-    (varImgsRes.data || []).forEach((img: any) => {
+    (varImgsData || []).forEach((img: any) => {
       if (!varImgsMap.has(img.variant_id)) varImgsMap.set(img.variant_id, []);
       varImgsMap.get(img.variant_id)!.push(img);
     });
