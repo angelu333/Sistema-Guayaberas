@@ -521,7 +521,7 @@ export function ProductDetailModal({
               )}
             </div>
 
-            {/* Disponibilidad */}
+            {/* Disponibilidad con cantidad exacta por talla */}
             <div
               className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl"
               style={{
@@ -540,8 +540,8 @@ export function ProductDetailModal({
                 {isOutOfStock
                   ? "Agotado en esta combinación"
                   : isLowStock
-                  ? "Pocas piezas disponibles"
-                  : "Disponible en existencia"}
+                  ? `Solo ${currentStock} pieza${currentStock !== 1 ? "s" : ""} disponible${currentStock !== 1 ? "s" : ""} en esta talla`
+                  : `${currentStock} pieza${currentStock !== 1 ? "s" : ""} disponible${currentStock !== 1 ? "s" : ""} en esta talla`}
               </span>
             </div>
           </div>

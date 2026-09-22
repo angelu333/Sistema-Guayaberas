@@ -11,7 +11,6 @@ import {
   Loader2,
   Shirt,
 } from "lucide-react";
-import { quotesService } from "@/services/quotes.service";
 import { formatWhatsAppPhone } from "@/lib/utils/formatters";
 
 
@@ -64,7 +63,7 @@ export function PublicCartDrawer({
     setSending(true);
 
     let quoteNumber = "";
-    // Registrar cotización automáticamente en Supabase si se provee tenantId
+    // Registrar cotización automáticamente usando el API route (service role, sin RLS)
     if (tenantId) {
       try {
         const quoteItems = items.map((i) => ({
@@ -73,18 +72,23 @@ export function PublicCartDrawer({
           unitPrice: i.unitPrice,
         }));
 
-        const res = await quotesService.createQuote(
-          tenantId,
-          "Cliente Catálogo Digital",
-          phone,
-          quoteItems,
-          [], // Tiers por defecto
-          "Cotización registrada automáticamente desde el Catálogo Digital Público",
-          15
-        );
+        const res = await fetch("/api/quotes/public", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tenantId,
+            clientName: "Cliente Catálogo Digital",
+            clientPhone: phone,
+            items: quoteItems,
+            notes: "Cotización registrada automáticamente desde el Catálogo Digital Público",
+            validDays: 15,
+          }),
+        });
 
-        if (res.success && res.quoteNumber) {
-          quoteNumber = res.quoteNumber;
+        const data = await res.json();
+
+        if (data.success && data.quoteNumber) {
+          quoteNumber = data.quoteNumber;
 
           // Notificar al administrador/vendedores via Push Web
           try {
@@ -93,19 +97,22 @@ export function PublicCartDrawer({
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 tenantId,
-                quoteNumber: res.quoteNumber,
+                quoteNumber: data.quoteNumber,
                 totalPieces,
                 totalAmount,
               }),
             });
           } catch {
-            // La notificacion push es opcional; no detiene el flujo
+            // La notificación push es opcional; no detiene el flujo
           }
+        } else {
+          console.warn("No se pudo registrar cotización automática:", data.error);
         }
       } catch (err) {
         console.warn("No se pudo registrar cotización automática en Supabase:", err);
       }
     }
+
 
     const itemsText = items
       .map(
