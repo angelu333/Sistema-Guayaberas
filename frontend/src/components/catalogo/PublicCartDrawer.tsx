@@ -106,7 +106,11 @@ export function PublicCartDrawer({
             // La notificación push es opcional; no detiene el flujo
           }
         } else {
-          console.warn("No se pudo registrar cotización automática:", data.error);
+          // TEMPORAL: Mostrar error exacto para diagnóstico
+          console.error("[QUOTES/PUBLIC] Error response:", data);
+          console.error("[QUOTES/PUBLIC] HTTP status:", res.status);
+          console.error("[QUOTES/PUBLIC] tenantId enviado:", tenantId);
+          console.error("[QUOTES/PUBLIC] items enviados:", quoteItems);
         }
       } catch (err) {
         console.warn("No se pudo registrar cotización automática en Supabase:", err);
