@@ -8,6 +8,7 @@ export async function updateSession(request: NextRequest) {
   const isPublicRoute =
     pathname.startsWith("/catalogo") ||
     pathname.startsWith("/cotizacion") ||
+    pathname.startsWith("/api/quotes/public") ||
     pathname.startsWith("/api/push") ||
     pathname.startsWith("/offline.html") ||
     pathname === "/manifest.json" ||
