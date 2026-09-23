@@ -47,6 +47,7 @@ export function PublicCartDrawer({
 }: PublicCartDrawerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const totalPieces = items.reduce((acc, item) => acc + item.quantity, 0);
   const totalAmount = items.reduce((acc, item) => acc + item.unitPrice * item.quantity, 0);
@@ -56,67 +57,71 @@ export function PublicCartDrawer({
   const handleSendWhatsAppCart = async () => {
     const phone = tenantWhatsapp || "";
     if (!phone) {
-      alert("No hay número de WhatsApp registrado en la empresa.");
+      setSendError("No hay un número de WhatsApp registrado para esta empresa.");
+      return;
+    }
+
+    if (!tenantId) {
+      setSendError("No se pudo identificar la empresa del catálogo. Actualiza la página e inténtalo de nuevo.");
       return;
     }
 
     setSending(true);
+    setSendError(null);
 
     let quoteNumber = "";
-    // Registrar cotización automáticamente usando el API route (service role, sin RLS)
-    if (tenantId) {
-      try {
-        const quoteItems = items.map((i) => ({
-          variantId: i.variantId,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-        }));
+    try {
+      const quoteItems = items.map((i) => ({
+        variantId: i.variantId,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+      }));
 
-        const res = await fetch("/api/quotes/public", {
+      const res = await fetch("/api/quotes/public", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          clientName: "Cliente Catálogo Digital",
+          clientPhone: phone,
+          items: quoteItems,
+          notes: "Cotización registrada automáticamente desde el Catálogo Digital Público",
+          validDays: 15,
+        }),
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok || !data?.success || !data?.quoteNumber) {
+        console.error("[QUOTES/PUBLIC] Error response:", data);
+        console.error("[QUOTES/PUBLIC] HTTP status:", res.status);
+        throw new Error(data?.error || `No se pudo crear la cotización (error ${res.status}).`);
+      }
+
+      quoteNumber = data.quoteNumber;
+
+      // La notificación push es opcional; no debe impedir que se envíe el pedido.
+      try {
+        await fetch("/api/push/send-quote", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             tenantId,
-            clientName: "Cliente Catálogo Digital",
-            clientPhone: phone,
-            items: quoteItems,
-            notes: "Cotización registrada automáticamente desde el Catálogo Digital Público",
-            validDays: 15,
+            quoteNumber,
+            totalPieces,
+            totalAmount,
           }),
         });
-
-        const data = await res.json();
-
-        if (data.success && data.quoteNumber) {
-          quoteNumber = data.quoteNumber;
-
-          // Notificar al administrador/vendedores via Push Web
-          try {
-            await fetch("/api/push/send-quote", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                tenantId,
-                quoteNumber: data.quoteNumber,
-                totalPieces,
-                totalAmount,
-              }),
-            });
-          } catch {
-            // La notificación push es opcional; no detiene el flujo
-          }
-        } else {
-          // TEMPORAL: Mostrar error exacto para diagnóstico
-          console.error("[QUOTES/PUBLIC] Error response:", data);
-          console.error("[QUOTES/PUBLIC] HTTP status:", res.status);
-          console.error("[QUOTES/PUBLIC] tenantId enviado:", tenantId);
-          console.error("[QUOTES/PUBLIC] items enviados:", quoteItems);
-        }
       } catch (err) {
-        console.warn("No se pudo registrar cotización automática en Supabase:", err);
+        console.warn("No se pudo enviar la notificación push:", err);
       }
+    } catch (err) {
+      console.error("No se pudo registrar cotización automática en Supabase:", err);
+      const detail = err instanceof Error ? err.message : "Error desconocido.";
+      setSendError(`No se creó la cotización. WhatsApp no se abrió. ${detail}`);
+      setSending(false);
+      return;
     }
-
 
     const itemsText = items
       .map(
@@ -303,6 +308,12 @@ export function PublicCartDrawer({
                 )}
                 {sending ? "Generando Folio..." : "Enviar Pedido por WhatsApp"}
               </button>
+
+              {sendError && (
+                <p className="rounded-xl border border-[#B85450]/30 bg-[#FEF5F5] p-3 text-center text-xs font-semibold text-[#B85450]">
+                  {sendError}
+                </p>
+              )}
 
               <p className="text-[10px] text-center text-[#8B7D6B]">
                 Se registrará la cotización en el sistema y se abrirá WhatsApp con el folio generado.

@@ -6,12 +6,18 @@ const SUPABASE_URL =
 const SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   process.env.SUPABASE_SERVICE_KEY ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
   "";
 
 function getAdminClient() {
-  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
-    throw new Error("Supabase credentials not configured in environment");
+  if (!SUPABASE_URL) {
+    throw new Error(
+      "La variable NEXT_PUBLIC_SUPABASE_URL no está configurada en este despliegue."
+    );
+  }
+  if (!SERVICE_ROLE_KEY) {
+    throw new Error(
+      "La variable SUPABASE_SERVICE_ROLE_KEY no está configurada en este despliegue."
+    );
   }
   return createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: {
