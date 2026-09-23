@@ -94,10 +94,7 @@ export const inventoryService = {
     };
   },
 
-  /**
-   * Obtiene la lista de ubicaciones activas del tenant (bodegas/tiendas).
-   * Si el tenant no tiene ninguna creada aun, crea automaticamente "Bodega Principal".
-   */
+  /** Obtiene la lista de ubicaciones activas del tenant (bodegas/tiendas). */
   async getLocations(tenantId: string): Promise<Location[]> {
     const { data, error } = await supabase
       .from("ubicaciones")
@@ -121,30 +118,7 @@ export const inventoryService = {
       }));
     }
 
-    // Auto-crear "Bodega Principal" por defecto
-    const { data: newLoc, error: createError } = await supabase
-      .from("ubicaciones")
-      .insert({
-        tenant_id: tenantId,
-        name: "Bodega Principal",
-        description: "Ubicación predeterminada del negocio",
-        is_active: true,
-      })
-      .select()
-      .single();
-
-    if (createError || !newLoc) {
-      console.error("Error al auto-crear ubicación por defecto:", createError);
-      return [];
-    }
-
-    return [{
-      id: newLoc.id,
-      tenantId: newLoc.tenant_id,
-      name: newLoc.name,
-      description: newLoc.description,
-      isActive: newLoc.is_active,
-    }];
+    return [];
   },
 
   /**
@@ -198,7 +172,7 @@ export const inventoryService = {
         sizeName: v.tallas?.name || null,
         sleeveTypeName: v.tipos_manga?.name || null,
         locationId: "",
-        locationName: "Bodega Principal",
+        locationName: "Todas las sucursales",
         quantity: totalStock,
         minStock: v.min_stock || 0,
         salePrice: Number(v.sale_price || 0),
@@ -215,6 +189,14 @@ export const inventoryService = {
     tenantId: string,
     locationId?: string
   ): Promise<StockItemView[]> {
+    const selectedLocationName = locationId
+      ? (await supabase
+        .from("ubicaciones")
+        .select("name")
+        .eq("id", locationId)
+        .maybeSingle()).data?.name || "Ubicación no encontrada"
+      : "Sin ubicación registrada";
+
     // 1. Obtener todas las variantes activas del tenant
     const { data: variants, error: varError } = await supabase
       .from("variantes_producto")
@@ -279,7 +261,7 @@ export const inventoryService = {
           sizeName: v.tallas?.name || null,
           sleeveTypeName: v.tipos_manga?.name || null,
           locationId: locationId || "",
-          locationName: "Bodega Principal",
+          locationName: selectedLocationName,
           quantity: 0,
           minStock: v.min_stock || 5,
           costPrice: Number(v.cost_price || 0),
@@ -300,7 +282,7 @@ export const inventoryService = {
             sizeName: v.tallas?.name || null,
             sleeveTypeName: v.tipos_manga?.name || null,
             locationId: ex.location_id,
-            locationName: ex.ubicaciones?.name || "Bodega Principal",
+            locationName: ex.ubicaciones?.name || "Ubicación no encontrada",
             quantity: ex.quantity,
             minStock: v.min_stock || 5,
             costPrice: Number(v.cost_price || 0),
@@ -391,7 +373,7 @@ export const inventoryService = {
         colorName: v?.colores?.name || null,
         sizeName: v?.tallas?.name || null,
         locationId: row.location_id,
-        locationName: row.ubicaciones?.name || "Bodega Principal",
+        locationName: row.ubicaciones?.name || "Ubicación no encontrada",
         type: row.type,
         quantity: row.quantity,
         quantityBefore: row.quantity_before,

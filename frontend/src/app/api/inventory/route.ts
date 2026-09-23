@@ -78,6 +78,12 @@ export async function GET(req: NextRequest) {
 
     const variants = variantsRes.data || [];
     const locations = locationsRes.data || [];
+    const locationNames = new Map(
+      locations.map((location: any) => [location.id, location.name])
+    );
+    const selectedLocationName = locationId
+      ? locationNames.get(locationId) || "Ubicación no encontrada"
+      : "Sin ubicación registrada";
     const vIds = variants.map((v: any) => v.id);
 
     // Obtener existencias directamente por tenant_id para no exceder límites de URL
@@ -125,7 +131,7 @@ export async function GET(req: NextRequest) {
           sizeName: v.tallas?.name || null,
           sleeveTypeName: v.tipos_manga?.name || null,
           locationId: locationId || "",
-          locationName: "Bodega Principal",
+          locationName: selectedLocationName,
           quantity: 0,
           minStock,
           costPrice: Number(v.cost_price || 0),
@@ -141,7 +147,7 @@ export async function GET(req: NextRequest) {
           sizeName: v.tallas?.name || null,
           sleeveTypeName: v.tipos_manga?.name || null,
           locationId: locationId || "",
-          locationName: "Bodega Principal",
+          locationName: selectedLocationName,
           currentStock: 0,
           minStock,
           isOutOfStock: true,
@@ -164,7 +170,7 @@ export async function GET(req: NextRequest) {
             sizeName: v.tallas?.name || null,
             sleeveTypeName: v.tipos_manga?.name || null,
             locationId: ex.location_id,
-            locationName: ex.ubicaciones?.name || "Ubicación",
+            locationName: locationNames.get(ex.location_id) || ex.ubicaciones?.name || "Ubicación no encontrada",
             quantity: qty,
             minStock,
             costPrice: Number(v.cost_price || 0),
@@ -181,7 +187,7 @@ export async function GET(req: NextRequest) {
               sizeName: v.tallas?.name || null,
               sleeveTypeName: v.tipos_manga?.name || null,
               locationId: ex.location_id,
-              locationName: ex.ubicaciones?.name || "Ubicación",
+              locationName: locationNames.get(ex.location_id) || ex.ubicaciones?.name || "Ubicación no encontrada",
               currentStock: qty,
               minStock,
               isOutOfStock: qty === 0,
@@ -203,7 +209,7 @@ export async function GET(req: NextRequest) {
         colorName: v?.colores?.name || null,
         sizeName: v?.tallas?.name || null,
         locationId: row.location_id,
-        locationName: row.ubicaciones?.name || "Ubicación",
+        locationName: locationNames.get(row.location_id) || row.ubicaciones?.name || "Ubicación no encontrada",
         type: row.type,
         quantity: row.quantity,
         quantityBefore: row.quantity_before ?? 0,
