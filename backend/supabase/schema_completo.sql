@@ -232,45 +232,55 @@ CREATE TABLE IF NOT EXISTS public.detalle_transferencias (
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS public.clientes (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  phone       TEXT,
-  email       TEXT,
-  address     TEXT,
-  notes       TEXT,
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+  id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id        UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  full_name        TEXT NOT NULL,
+  phone            TEXT,
+  email            TEXT,
+  type             TEXT NOT NULL DEFAULT 'regular' CHECK (type IN ('regular', 'wholesale')),
+  company          TEXT,
+  rfc              TEXT,
+  address          TEXT,
+  discount_percent NUMERIC(5,2) NOT NULL DEFAULT 0,
+  notes            TEXT,
+  is_active        BOOLEAN NOT NULL DEFAULT true,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.ventas (
-  id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id      UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  location_id    UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
-  folio          TEXT NOT NULL,
-  client_id      UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
-  user_id        UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  subtotal       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  discount       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  total          NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  payment_method TEXT NOT NULL DEFAULT 'efectivo' CHECK (payment_method IN ('efectivo', 'tarjeta', 'transferencia', 'mixto')),
-  status         TEXT NOT NULL DEFAULT 'completada' CHECK (status IN ('completada', 'cancelada', 'pendiente')),
-  notes          TEXT,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT uq_sale_folio_per_tenant UNIQUE (tenant_id, folio)
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id       UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  ticket_number   TEXT NOT NULL,
+  client_id       UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+  seller_id       UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+  location_id     UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
+  subtotal        NUMERIC(10,2) NOT NULL DEFAULT 0,
+  discount_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+  total           NUMERIC(10,2) NOT NULL DEFAULT 0,
+  status          TEXT NOT NULL DEFAULT 'completed' CHECK (status IN ('completed', 'cancelled', 'refunded')),
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_ticket_per_tenant UNIQUE (tenant_id, ticket_number)
 );
 
 CREATE TABLE IF NOT EXISTS public.detalle_ventas (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id    UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+  sale_id      UUID NOT NULL REFERENCES public.ventas(id) ON DELETE CASCADE,
+  variant_id   UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
+  quantity     INTEGER NOT NULL CHECK (quantity > 0),
+  unit_price   NUMERIC(10,2) NOT NULL,
+  discount_pct NUMERIC(5,2) NOT NULL DEFAULT 0,
+  subtotal     NUMERIC(10,2) NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.pagos_venta (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   sale_id     UUID NOT NULL REFERENCES public.ventas(id) ON DELETE CASCADE,
-  variant_id  UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
-  quantity    INTEGER NOT NULL CHECK (quantity > 0),
-  unit_price  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  cost_price  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  discount    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  total       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
+  method      TEXT NOT NULL CHECK (method IN ('cash', 'card', 'transfer')),
+  amount      NUMERIC(10,2) NOT NULL CHECK (amount > 0),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -629,6 +639,7 @@ ALTER TABLE public.detalle_transferencias ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.detalle_ventas ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pagos_venta ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cotizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.detalle_cotizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
@@ -689,6 +700,7 @@ CREATE POLICY "detalle_transf_isolation" ON public.detalle_transferencias FOR AL
 CREATE POLICY "clientes_isolation" ON public.clientes FOR ALL USING (tenant_id = public.get_current_tenant_id());
 CREATE POLICY "ventas_isolation" ON public.ventas FOR ALL USING (tenant_id = public.get_current_tenant_id());
 CREATE POLICY "detalle_ventas_isolation" ON public.detalle_ventas FOR ALL USING (tenant_id = public.get_current_tenant_id());
+CREATE POLICY "pagos_venta_isolation" ON public.pagos_venta FOR ALL USING (tenant_id = public.get_current_tenant_id());
 
 CREATE POLICY "cotizaciones_public" ON public.cotizaciones FOR SELECT USING (true);
 CREATE POLICY "cotizaciones_own" ON public.cotizaciones FOR ALL USING (tenant_id = public.get_current_tenant_id());
