@@ -100,7 +100,7 @@ export async function downloadQuotePDF(quote: QuoteRecord): Promise<void> {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(...COLOR_ACCENT);
-    doc.text("Descuento de Mayoreo Aplicado", PAGE_W - MARGIN - 4, cursorY + 13, { align: "right" });
+    doc.text("Precio acordado aplicado", PAGE_W - MARGIN - 4, cursorY + 13, { align: "right" });
   }
 
   // TABLA DE PRENDAS
@@ -108,7 +108,7 @@ export async function downloadQuotePDF(quote: QuoteRecord): Promise<void> {
   autoTable(doc, {
     startY: cursorY,
     margin: { left: MARGIN, right: MARGIN },
-    head: [["Modelo / Guayabera", "Detalle / Talla", "Cant.", "Precio Reg.", "P. Mayoreo", "Subtotal"]],
+    head: [["Modelo / Guayabera", "Detalle / Talla", "Cant.", "Precio Reg.", "Precio acordado", "Subtotal"]],
     body: quote.details.map((d) => [
       `${d.productName}\nSKU: ${d.sku}`,
       `${d.colorName || ""}${d.sizeName ? ` (Talla ${d.sizeName})` : ""}`,
@@ -155,7 +155,7 @@ export async function downloadQuotePDF(quote: QuoteRecord): Promise<void> {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     doc.setTextColor(...COLOR_ACCENT);
-    doc.text("Ahorro Total por Mayoreo:", boxX, financialY + 1);
+    doc.text("Ahorro por precio acordado:", boxX, financialY + 1);
     doc.text(`-$${quote.discountAmount.toFixed(2)}`, PAGE_W - MARGIN, financialY + 1, { align: "right" });
   }
 

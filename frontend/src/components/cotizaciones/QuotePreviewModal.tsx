@@ -144,7 +144,7 @@ export function QuotePreviewModal({
               </p>
               {quote.discountAmount > 0 && (
                 <span className="inline-block text-[11px] font-bold text-[#3F7D58] bg-[#EBF5F0] px-2.5 py-0.5 rounded-md mt-1 border border-[#A7D7B9]">
-                  Descuento de Mayoreo Aplicado
+                  Precio acordado aplicado
                 </span>
               )}
             </div>
@@ -158,7 +158,7 @@ export function QuotePreviewModal({
                 <th className="py-3 px-3 text-center">Detalle / Talla</th>
                 <th className="py-3 px-3 text-center">Cant.</th>
                 <th className="py-3 px-3 text-right">Precio Reg.</th>
-                <th className="py-3 px-3 text-right">P. Mayoreo</th>
+                <th className="py-3 px-3 text-right">Precio acordado</th>
                 <th className="py-3 px-3 text-right">Subtotal</th>
               </tr>
             </thead>
@@ -175,7 +175,7 @@ export function QuotePreviewModal({
                     {d.colorName || ""} {d.sizeName ? `(Talla ${d.sizeName})` : ""}
                   </td>
                   <td className="py-3 px-3 text-center font-bold text-[#26302B]">{d.quantity} pzas</td>
-                  <td className="py-3 px-3 text-right font-mono text-[#8FA393] line-through">
+                  <td className={`py-3 px-3 text-right font-mono text-[#8FA393] ${d.finalUnitPrice < d.unitPrice ? "line-through" : ""}`}>
                     ${d.unitPrice.toFixed(2)}
                   </td>
                   <td className="py-3 px-3 text-right font-mono font-bold text-[#3F7D58]">
@@ -199,7 +199,7 @@ export function QuotePreviewModal({
 
               {quote.discountAmount > 0 && (
                 <div className="flex justify-between text-[#3F7D58] font-bold bg-[#EBF5F0] p-2 rounded-lg border border-[#A7D7B9]">
-                  <span>Ahorro Total por Mayoreo:</span>
+                  <span>Ahorro por precio acordado:</span>
                   <span className="font-mono">-${quote.discountAmount.toFixed(2)}</span>
                 </div>
               )}

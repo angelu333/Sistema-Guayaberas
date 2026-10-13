@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { X, FileText, Plus, Trash2, Tag, Percent } from "lucide-react";
+import { X, FileText, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { inventoryService } from "@/services/inventory.service";
-import { quotesService, type WholesaleTier, type CreateQuoteItemDTO } from "@/services/quotes.service";
+import { type CreateQuoteItemDTO } from "@/services/quotes.service";
 
 interface NewQuoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   tenantId: string;
-  tiers: WholesaleTier[];
   onQuoteCreated: (
     clientName: string,
     clientPhone: string | null,
@@ -24,7 +23,6 @@ export function NewQuoteModal({
   isOpen,
   onClose,
   tenantId,
-  tiers,
   onQuoteCreated,
 }: NewQuoteModalProps) {
   const [variants, setVariants] = useState<any[]>([]);
@@ -35,7 +33,7 @@ export function NewQuoteModal({
   const [validDays, setValidDays] = useState(15);
   const [notes, setNotes] = useState("");
 
-  const [items, setItems] = useState<{ variantId: string; quantity: number; unitPrice: number }[]>([]);
+  const [items, setItems] = useState<CreateQuoteItemDTO[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -51,6 +49,7 @@ export function NewQuoteModal({
             variantId: vars[0].id,
             quantity: 12,
             unitPrice: Number(vars[0].salePrice || 450),
+            finalUnitPrice: Number(vars[0].salePrice || 450),
           },
         ]);
       }
@@ -70,6 +69,7 @@ export function NewQuoteModal({
         variantId: variants[0].id,
         quantity: 5,
         unitPrice: Number(variants[0].salePrice || 450),
+        finalUnitPrice: Number(variants[0].salePrice || 450),
       },
     ]);
   };
@@ -81,9 +81,8 @@ export function NewQuoteModal({
 
   // Cálculos en tiempo real
   const totalPieces = items.reduce((acc, i) => acc + i.quantity, 0);
-  const activeDiscountPercent = quotesService.calculateTierDiscount(totalPieces, tiers);
   const rawSubtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
-  const finalTotal = rawSubtotal * (1 - activeDiscountPercent / 100);
+  const finalTotal = items.reduce((acc, i) => acc + i.quantity * i.finalUnitPrice, 0);
   const totalSavings = rawSubtotal - finalTotal;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,8 +109,8 @@ export function NewQuoteModal({
           <div className="flex items-center gap-2">
             <FileText className="w-5 h-5 text-[#556B5D]" />
             <div>
-              <h2 className="text-base font-bold text-[#26302B]">Nueva Cotización de Mayoreo</h2>
-              <p className="text-xs text-[#6B7A71]">Presupuesto automático con descuentos por escala</p>
+              <h2 className="text-base font-bold text-[#26302B]">Nueva Cotización</h2>
+              <p className="text-xs text-[#6B7A71]">Define el precio final acordado para cada prenda</p>
             </div>
           </div>
           <button
@@ -153,16 +152,15 @@ export function NewQuoteModal({
             </div>
           </div>
 
-          {/* Banner en tiempo real de escala de mayoreo */}
+          {/* Resumen de precios acordados */}
           <div className="p-3 bg-[#EBF5F0] border border-[#A7D7B9] rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Percent className="w-5 h-5 text-[#3F7D58]" />
               <div>
                 <span className="font-bold text-[#26302B] block">
                   Total Guayaberas Solicitadas: {totalPieces} pzas
                 </span>
                 <span className="text-[11px] text-[#6B7A71]">
-                  Descuento por escala asignado: <strong>{activeDiscountPercent}% OFF</strong>
+                  Los precios acordados se cobrarán sin descuentos automáticos adicionales.
                 </span>
               </div>
             </div>
@@ -191,7 +189,6 @@ export function NewQuoteModal({
             ) : (
               <div className="space-y-2 border border-[#DDD9D0] rounded-xl p-3 bg-[#F8F6F1]">
                 {items.map((item, idx) => {
-                  const finalUnitPrice = item.unitPrice * (1 - activeDiscountPercent / 100);
                   return (
                     <div
                       key={idx}
@@ -211,6 +208,7 @@ export function NewQuoteModal({
                                       ...row,
                                       variantId: vId,
                                       unitPrice: Number(found?.salePrice || 450),
+                                       finalUnitPrice: Number(found?.salePrice || 450),
                                     }
                                   : row
                               )
@@ -244,30 +242,28 @@ export function NewQuoteModal({
 
                       <div className="w-24">
                         <label className="block text-[10px] text-[#6B7A71]">Precio Reg.</label>
+                        <span className="font-mono text-[#8FA393] text-xs pt-1 block">${item.unitPrice.toFixed(2)}</span>
+                      </div>
+
+                      <div className="w-28">
+                        <label className="block text-[10px] text-[#6B7A71]">Precio acordado</label>
                         <input
                           type="number"
                           min={0}
                           step={0.01}
-                          value={item.unitPrice}
+                          value={item.finalUnitPrice}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
                             setItems((prev) =>
-                              prev.map((row, i) => (i === idx ? { ...row, unitPrice: val } : row))
+                              prev.map((row, i) => (i === idx ? { ...row, finalUnitPrice: val } : row))
                             );
                           }}
-                          className="w-full px-2 py-1 text-xs border border-[#DDD9D0] rounded-lg font-mono text-right text-[#8FA393]"
+                          className="w-full px-2 py-1 text-xs border border-[#DDD9D0] rounded-lg font-mono text-right font-bold text-[#3F7D58]"
                         />
                       </div>
 
-                      <div className="w-24 text-right">
-                        <label className="block text-[10px] text-[#6B7A71]">P. Mayoreo</label>
-                        <span className="font-mono font-bold text-[#3F7D58] text-xs pt-1 block">
-                          ${finalUnitPrice.toFixed(2)}
-                        </span>
-                      </div>
-
                       <div className="w-24 text-right font-mono font-bold text-[#26302B] text-xs pt-3">
-                        ${(item.quantity * finalUnitPrice).toFixed(2)}
+                        ${(item.quantity * item.finalUnitPrice).toFixed(2)}
                       </div>
 
                       <button
@@ -320,7 +316,7 @@ export function NewQuoteModal({
             <div>
               <span className="font-bold text-[#26302B] block">Total Estimado de la Cotización:</span>
               <span className="text-xs text-[#6B7A71]">
-                {totalPieces} piezas con {activeDiscountPercent}% de descuento de mayoreo
+                {totalPieces} piezas con precios finales acordados manualmente
               </span>
             </div>
             <span className="text-xl font-bold font-mono text-[#3F7D58]">

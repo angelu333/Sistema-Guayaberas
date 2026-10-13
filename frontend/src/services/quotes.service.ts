@@ -56,7 +56,10 @@ export interface QuoteDetailRecord {
 export interface CreateQuoteItemDTO {
   variantId: string;
   quantity: number;
+  /** Precio regular de referencia del catálogo. */
   unitPrice: number;
+  /** Precio final acordado con el cliente; no recibe descuentos automáticos. */
+  finalUnitPrice: number;
 }
 
 export const DEFAULT_WHOLESALE_TIERS: WholesaleTier[] = [
@@ -345,7 +348,6 @@ export const quotesService = {
     clientName: string,
     clientPhone: string | null,
     items: CreateQuoteItemDTO[],
-    tiers: WholesaleTier[],
     notes?: string,
     validDays: number = 15,
     userId?: string
@@ -359,14 +361,13 @@ export const quotesService = {
     const quoteNumber = `COT-${todayStr}-${randomSuffix}`;
 
     const totalPieces = items.reduce((acc, i) => acc + i.quantity, 0);
-    const discountPercent = this.calculateTierDiscount(totalPieces, tiers);
 
     let rawSubtotal = 0;
     let finalSubtotal = 0;
 
     const detailRows = items.map((item) => {
       const lineSubtotalRaw = item.quantity * item.unitPrice;
-      const finalPrice = item.unitPrice * (1 - discountPercent / 100);
+      const finalPrice = item.finalUnitPrice;
       const lineSubtotalFinal = item.quantity * finalPrice;
 
       rawSubtotal += lineSubtotalRaw;
@@ -377,7 +378,7 @@ export const quotesService = {
         variant_id: item.variantId,
         quantity: item.quantity,
         unit_price: item.unitPrice,
-        discount_percent: discountPercent,
+        discount_percent: 0,
         final_unit_price: finalPrice,
         subtotal: lineSubtotalFinal,
       };
@@ -423,18 +424,16 @@ export const quotesService = {
   },
 
   /**
-   * Actualiza las cantidades de una cotización (usado por el cliente en el enlace interactivo)
+   * Actualiza cantidades sin alterar el precio final acordado de cada renglón.
    */
   async updateQuoteQuantities(
     quoteId: string,
-    updatedQuantities: { variantId: string; quantity: number }[],
-    tiers: WholesaleTier[]
+    updatedQuantities: { variantId: string; quantity: number }[]
   ): Promise<{ success: boolean; totalAmount?: number; discountPercent?: number; error?: string }> {
     const quote = await this.getQuoteById(quoteId);
     if (!quote) return { success: false, error: "Cotización no encontrada." };
 
     const totalPieces = updatedQuantities.reduce((acc, q) => acc + q.quantity, 0);
-    const discountPercent = this.calculateTierDiscount(totalPieces, tiers);
 
     let rawSubtotal = 0;
     let finalSubtotal = 0;
@@ -444,7 +443,7 @@ export const quotesService = {
       if (!detail) continue;
 
       const lineRaw = q.quantity * detail.unitPrice;
-      const finalPrice = detail.unitPrice * (1 - discountPercent / 100);
+      const finalPrice = detail.finalUnitPrice;
       const lineFinal = q.quantity * finalPrice;
 
       rawSubtotal += lineRaw;
@@ -454,7 +453,7 @@ export const quotesService = {
         .from("detalle_cotizaciones")
         .update({
           quantity: q.quantity,
-          discount_percent: discountPercent,
+          discount_percent: 0,
           final_unit_price: finalPrice,
           subtotal: lineFinal,
         })
@@ -473,7 +472,7 @@ export const quotesService = {
       })
       .eq("id", quoteId);
 
-    return { success: true, totalAmount: finalSubtotal, discountPercent };
+    return { success: true, totalAmount: finalSubtotal, discountPercent: 0 };
   },
 
   /**
@@ -499,20 +498,18 @@ export const quotesService = {
     quoteId: string,
     tenantId: string,
     items: CreateQuoteItemDTO[],
-    tiers: WholesaleTier[],
     notes?: string
   ): Promise<{ success: boolean; error?: string }> {
     await supabase.from("detalle_cotizaciones").delete().eq("quote_id", quoteId);
 
     const totalPieces = items.reduce((acc, i) => acc + i.quantity, 0);
-    const discountPercent = this.calculateTierDiscount(totalPieces, tiers);
 
     let rawSubtotal = 0;
     let finalSubtotal = 0;
 
     const detailRows = items.map((item) => {
       const lineSubtotalRaw = item.quantity * item.unitPrice;
-      const finalPrice = item.unitPrice * (1 - discountPercent / 100);
+      const finalPrice = item.finalUnitPrice;
       const lineSubtotalFinal = item.quantity * finalPrice;
 
       rawSubtotal += lineSubtotalRaw;
@@ -524,7 +521,7 @@ export const quotesService = {
         variant_id: item.variantId,
         quantity: item.quantity,
         unit_price: item.unitPrice,
-        discount_percent: discountPercent,
+        discount_percent: 0,
         final_unit_price: finalPrice,
         subtotal: lineSubtotalFinal,
       };

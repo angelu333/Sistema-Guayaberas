@@ -9,13 +9,12 @@ import {
   CheckCircle,
   Plus,
   Minus,
-  Percent,
   Sparkles,
   ShoppingBag,
   Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { quotesService, type QuoteRecord, type WholesaleTier } from "@/services/quotes.service";
+import { quotesService, type QuoteRecord } from "@/services/quotes.service";
 import { formatWhatsAppPhone } from "@/lib/utils/formatters";
 
 
@@ -24,7 +23,6 @@ export default function PublicClientQuotePage() {
   const quoteId = params.id as string;
 
   const [quote, setQuote] = useState<QuoteRecord | null>(null);
-  const [tiers, setTiers] = useState<WholesaleTier[]>([]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -45,8 +43,6 @@ export default function PublicClientQuotePage() {
         });
         setQuantities(initialQty);
 
-        const tList = await quotesService.getWholesaleTiers(q.tenantId);
-        setTiers(tList);
       }
       setLoading(false);
     }
@@ -89,19 +85,13 @@ export default function PublicClientQuotePage() {
       quantity: q,
     }));
 
-    await quotesService.updateQuoteQuantities(quote.id, updatedItems, tiers);
+    await quotesService.updateQuoteQuantities(quote.id, updatedItems);
     const refreshed = await quotesService.getQuoteById(quote.id);
     if (refreshed) setQuote(refreshed);
     setUpdating(false);
   };
 
   const totalPieces = Object.values(quantities).reduce((acc, q) => acc + q, 0);
-  const activeDiscountPercent = quotesService.calculateTierDiscount(totalPieces, tiers);
-
-  // Mensaje inteligente de upsell
-  const sortedTiers = [...tiers].sort((a, b) => a.minQuantity - b.minQuantity);
-  const nextTier = sortedTiers.find((t) => t.minQuantity > totalPieces);
-  const piecesNeededForNextTier = nextTier ? nextTier.minQuantity - totalPieces : 0;
 
   // Enviar a WhatsApp
   const handleConfirmWhatsApp = () => {
@@ -147,7 +137,7 @@ export default function PublicClientQuotePage() {
               Cotización Personalizada para {quote.clientName}
             </h1>
             <p className="text-xs text-[#D0C9BD]">
-              Puedes ajustar las cantidades abajo y verás cómo baja tu costo por pieza.
+              Puedes ajustar las cantidades; se conservará el precio acordado por pieza.
             </p>
           </div>
 
@@ -173,21 +163,6 @@ export default function PublicClientQuotePage() {
             </Button>
           </div>
         </div>
-
-        {/* Mensaje de Descuento por Volumen en Tiempo Real */}
-        {nextTier && piecesNeededForNextTier > 0 && (
-          <div className="p-4 bg-[#FBF4E8] border border-[#E6D4B6] rounded-2xl flex items-center gap-3 animate-fade-in print:hidden">
-            <Percent className="w-6 h-6 text-[#C49A5A] shrink-0" />
-            <div>
-              <span className="font-bold text-[#26302B] text-xs block">
-                ¡Estás a solo {piecesNeededForNextTier} guayabera{piecesNeededForNextTier > 1 ? "s" : ""} de desbloquear mayor descuento!
-              </span>
-              <span className="text-[11px] text-[#6B7A71]">
-                Suma {piecesNeededForNextTier} pieza{piecesNeededForNextTier > 1 ? "s" : ""} más para alcanzar el nivel <strong>{nextTier.name}</strong> con <strong>{nextTier.discountPercent}% OFF</strong>.
-              </span>
-            </div>
-          </div>
-        )}
 
         {/* Documento Imprimible de Cotización */}
         <div className="bg-white rounded-3xl shadow-xl border border-[#DDD9D0] p-8 space-y-6 print:shadow-none print:border-none print:p-0">
@@ -231,12 +206,8 @@ export default function PublicClientQuotePage() {
             </div>
 
             <div className="text-left sm:text-right">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7A71]">
-                Descuento Aplicado:
-              </span>
-              <p className="text-sm font-bold text-[#3F7D58]">
-                {activeDiscountPercent}% OFF ({totalPieces} guayaberas)
-              </p>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B7A71]">Precio aplicado:</span>
+              <p className="text-sm font-bold text-[#3F7D58]">Precio acordado ({totalPieces} guayaberas)</p>
             </div>
           </div>
 
@@ -291,7 +262,7 @@ export default function PublicClientQuotePage() {
                     </div>
 
                     <div className="text-right min-w-[120px]">
-                      <span className="text-[10px] text-[#8FA393] line-through block font-mono">
+                      <span className={`text-[10px] text-[#8FA393] block font-mono ${d.finalUnitPrice < d.unitPrice ? "line-through" : ""}`}>
                         ${(currentQty * d.unitPrice).toFixed(2)}
                       </span>
                       <span className="text-sm font-bold font-mono text-[#3F7D58]">
@@ -317,7 +288,7 @@ export default function PublicClientQuotePage() {
 
               {quote.discountAmount > 0 && (
                 <div className="flex justify-between text-[#3F7D58] font-bold">
-                  <span>Ahorro por Mayoreo ({activeDiscountPercent}%):</span>
+                  <span>Ahorro por precio acordado:</span>
                   <span className="font-mono">-${quote.discountAmount.toFixed(2)}</span>
                 </div>
               )}

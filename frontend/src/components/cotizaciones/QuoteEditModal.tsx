@@ -15,11 +15,9 @@ import {
   Shirt,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import {
   quotesService,
   type QuoteRecord,
-  type WholesaleTier,
   type CreateQuoteItemDTO,
 } from "@/services/quotes.service";
 import { productsService } from "@/services/products.service";
@@ -30,7 +28,6 @@ interface QuoteEditModalProps {
   onClose: () => void;
   quote: QuoteRecord | null;
   tenantId: string;
-  tiers: WholesaleTier[];
   onQuoteUpdated: () => void;
 }
 
@@ -42,6 +39,7 @@ interface EditableItem {
   sizeName: string | null;
   quantity: number;
   unitPrice: number;
+  finalUnitPrice: number;
 }
 
 export function QuoteEditModal({
@@ -49,7 +47,6 @@ export function QuoteEditModal({
   onClose,
   quote,
   tenantId,
-  tiers,
   onQuoteUpdated,
 }: QuoteEditModalProps) {
   const [items, setItems] = useState<EditableItem[]>([]);
@@ -77,6 +74,7 @@ export function QuoteEditModal({
         sizeName: d.sizeName,
         quantity: d.quantity,
         unitPrice: d.unitPrice,
+        finalUnitPrice: d.finalUnitPrice,
       }));
       setItems(mapped);
 
@@ -90,10 +88,9 @@ export function QuoteEditModal({
   if (!isOpen || !quote) return null;
 
   const totalPieces = items.reduce((acc, i) => acc + i.quantity, 0);
-  const tierDiscountPercent = quotesService.calculateTierDiscount(totalPieces, tiers);
   const rawSubtotal = items.reduce((acc, i) => acc + i.quantity * i.unitPrice, 0);
-  const discountAmount = rawSubtotal * (tierDiscountPercent / 100);
-  const finalTotal = rawSubtotal - discountAmount;
+  const finalTotal = items.reduce((acc, i) => acc + i.quantity * i.finalUnitPrice, 0);
+  const savingsAmount = rawSubtotal - finalTotal;
 
   const handleAddVariant = () => {
     if (!selectedVariantId) return;
@@ -119,6 +116,7 @@ export function QuoteEditModal({
           sizeName: v.size?.name || null,
           quantity: addQty,
           unitPrice: v.salePrice,
+          finalUnitPrice: v.salePrice,
         },
       ]);
     }
@@ -132,9 +130,9 @@ export function QuoteEditModal({
     );
   };
 
-  const handleUpdateUnitPrice = (index: number, newPrice: number) => {
+  const handleUpdateFinalUnitPrice = (index: number, newPrice: number) => {
     setItems((prev) =>
-      prev.map((item, i) => (i === index ? { ...item, unitPrice: newPrice } : item))
+      prev.map((item, i) => (i === index ? { ...item, finalUnitPrice: newPrice } : item))
     );
   };
 
@@ -156,13 +154,13 @@ export function QuoteEditModal({
         variantId: i.variantId,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
+        finalUnitPrice: i.finalUnitPrice,
       }));
 
       const resItems = await quotesService.updateQuoteItems(
         quote.id,
         tenantId,
         createDTOs,
-        tiers,
         notes
       );
 
@@ -280,7 +278,8 @@ export function QuoteEditModal({
                 <tr className="bg-[#F8F6F1] border-b border-[#DDD9D0] text-[11px] font-bold text-[#6B7A71] uppercase tracking-wider">
                   <th className="py-2.5 px-3">Modelo / Guayabera</th>
                   <th className="py-2.5 px-3 text-center">Cant.</th>
-                  <th className="py-2.5 px-3 text-right">Precio Unit.</th>
+                  <th className="py-2.5 px-3 text-right">Precio Reg.</th>
+                  <th className="py-2.5 px-3 text-right">Precio acordado</th>
                   <th className="py-2.5 px-3 text-right">Subtotal</th>
                   <th className="py-2.5 px-3 text-center">Acción</th>
                 </tr>
@@ -288,7 +287,7 @@ export function QuoteEditModal({
               <tbody className="divide-y divide-[#DDD9D0] text-xs">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-[#6B7A71]">
+                    <td colSpan={6} className="py-6 text-center text-[#6B7A71]">
                       No hay prendas agregadas.
                     </td>
                   </tr>
@@ -321,17 +320,21 @@ export function QuoteEditModal({
                       </td>
 
                       <td className="py-2.5 px-3 text-right">
+                        <span className="font-mono text-[#8FA393]">${item.unitPrice.toFixed(2)}</span>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right">
                         <input
                           type="number"
                           step="10"
-                          value={item.unitPrice}
-                          onChange={(e) => handleUpdateUnitPrice(idx, parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 text-right font-mono font-bold border border-[#DDD9D0] rounded-lg"
+                          value={item.finalUnitPrice}
+                          onChange={(e) => handleUpdateFinalUnitPrice(idx, parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 text-right font-mono font-bold text-[#3F7D58] border border-[#DDD9D0] rounded-lg"
                         />
                       </td>
 
                       <td className="py-2.5 px-3 text-right font-mono font-bold text-[#3F7D58]">
-                        ${(item.quantity * item.unitPrice).toFixed(2)}
+                        ${(item.quantity * item.finalUnitPrice).toFixed(2)}
                       </td>
 
                       <td className="py-2.5 px-3 text-center">
@@ -370,9 +373,9 @@ export function QuoteEditModal({
               <span className="text-xs font-bold text-[#26302B]">
                 Resumen: {totalPieces} prendas
               </span>
-              {tierDiscountPercent > 0 && (
+              {savingsAmount > 0 && (
                 <p className="text-[11px] text-[#3F7D58] font-bold">
-                  Descuento de mayoreo ({tierDiscountPercent}%): -${discountAmount.toFixed(2)} MXN
+                  Ahorro por precio acordado: -${savingsAmount.toFixed(2)} MXN
                 </p>
               )}
             </div>

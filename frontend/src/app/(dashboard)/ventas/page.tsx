@@ -14,7 +14,6 @@ import {
   ArrowUpRight,
   FileText,
   Plus,
-  Sliders,
   DollarSign,
   CheckCircle,
   Eye,
@@ -43,7 +42,6 @@ import { salesService, type SaleRecord } from "@/services/sales.service";
 import {
   quotesService,
   type QuoteRecord,
-  type WholesaleTier,
   type CreateQuoteItemDTO,
 } from "@/services/quotes.service";
 import { NewQuoteModal } from "@/components/cotizaciones/NewQuoteModal";
@@ -51,7 +49,6 @@ import { QuotePreviewModal } from "@/components/cotizaciones/QuotePreviewModal";
 import { QuoteEditModal } from "@/components/cotizaciones/QuoteEditModal";
 import { ConvertQuoteModal } from "@/components/cotizaciones/ConvertQuoteModal";
 import { DeleteQuoteModal } from "@/components/cotizaciones/DeleteQuoteModal";
-import { WholesaleTierModal } from "@/components/cotizaciones/WholesaleTierModal";
 import { locationsService, type LocationDetail } from "@/services/locations.service";
 
 function VentasYCotizacionesContent() {
@@ -86,11 +83,9 @@ function VentasYCotizacionesContent() {
 
   // Estados Cotizaciones
   const [quotes, setQuotes] = useState<QuoteRecord[]>([]);
-  const [tiers, setTiers] = useState<WholesaleTier[]>([]);
   const [loadingQuotes, setLoadingQuotes] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("pending");
   const [isNewQuoteModalOpen, setIsNewQuoteModalOpen] = useState(false);
-  const [isTierModalOpen, setIsTierModalOpen] = useState(false);
   const [previewQuote, setPreviewQuote] = useState<QuoteRecord | null>(null);
   const [editingQuote, setEditingQuote] = useState<QuoteRecord | null>(null);
   const [convertingQuote, setConvertingQuote] = useState<QuoteRecord | null>(null);
@@ -119,12 +114,8 @@ function VentasYCotizacionesContent() {
     if (!effectiveTenantId) return;
     setLoadingQuotes(true);
     try {
-      const [qData, tData] = await Promise.all([
-        quotesService.getQuotes(effectiveTenantId),
-        quotesService.getWholesaleTiers(effectiveTenantId),
-      ]);
+      const qData = await quotesService.getQuotes(effectiveTenantId);
       setQuotes(qData);
-      setTiers(tData);
     } catch (err) {
       console.error("Error al cargar cotizaciones:", err);
     } finally {
@@ -229,7 +220,6 @@ function VentasYCotizacionesContent() {
       clientName,
       clientPhone,
       items,
-      tiers,
       notes,
       validDays,
       session?.userId
@@ -318,20 +308,15 @@ function VentasYCotizacionesContent() {
             Ventas & Cotizaciones
           </h1>
           <p className="text-xs text-[#6B7A71] mt-0.5">
-            Historial de tickets cobrados, presupuestos de mayoreo y gestión de escalas
+            Historial de tickets cobrados y cotizaciones con precios acordados
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           {activeTab === "cotizaciones" ? (
-            <>
-              <Button variant="outline" size="sm" onClick={() => setIsTierModalOpen(true)}>
-                <Sliders className="w-4 h-4 mr-1.5" /> Escalas de Mayoreo
-              </Button>
-              <Button size="sm" onClick={() => setIsNewQuoteModalOpen(true)} className="bg-[#556B5D]">
-                <Plus className="w-4 h-4 mr-1.5" /> Nueva Cotización
-              </Button>
-            </>
+            <Button size="sm" onClick={() => setIsNewQuoteModalOpen(true)} className="bg-[#556B5D]">
+              <Plus className="w-4 h-4 mr-1.5" /> Nueva Cotización
+            </Button>
           ) : (
             <Button variant="outline" size="sm" onClick={loadSalesData}>
               <RefreshCw className={`w-4 h-4 ${loadingSales ? "animate-spin" : ""}`} />
@@ -840,7 +825,6 @@ function VentasYCotizacionesContent() {
         isOpen={isNewQuoteModalOpen}
         onClose={() => setIsNewQuoteModalOpen(false)}
         tenantId={effectiveTenantId || ""}
-        tiers={tiers}
         onQuoteCreated={handleCreateQuote}
       />
 
@@ -855,7 +839,6 @@ function VentasYCotizacionesContent() {
         onClose={() => setEditingQuote(null)}
         quote={editingQuote}
         tenantId={effectiveTenantId || ""}
-        tiers={tiers}
         onQuoteUpdated={loadQuotesData}
       />
 
@@ -874,13 +857,6 @@ function VentasYCotizacionesContent() {
         onDeleted={() => loadQuotesData()}
       />
 
-      <WholesaleTierModal
-        isOpen={isTierModalOpen}
-        onClose={() => setIsTierModalOpen(false)}
-        tenantId={effectiveTenantId || ""}
-        tiers={tiers}
-        onTiersUpdated={loadQuotesData}
-      />
     </div>
   );
 }
