@@ -6,6 +6,11 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+// The catalog is customer-facing inventory. Never serve a stale empty response
+// after a schema/data change in a tenant database.
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -126,6 +131,18 @@ export async function GET(req: NextRequest) {
     ]);
 
     const rawVariants = variantsRes.data || [];
+    const catalogQueryError = [
+      variantsRes.error,
+      prodsRes.error,
+      colorsRes.error,
+      sizesRes.error,
+      sleevesRes.error,
+    ].find(Boolean);
+
+    if (catalogQueryError) {
+      throw new Error(`No se pudo cargar el catálogo: ${catalogQueryError.message}`);
+    }
+
     const rawVariantIds = rawVariants.map((v: any) => v.id);
 
     // 3. Obtener existencias e imágenes de variante en paralelo
@@ -253,7 +270,7 @@ export async function GET(req: NextRequest) {
       catalog: mappedVariants,
     }, {
       headers: {
-        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        "Cache-Control": "no-store, max-age=0",
       },
     });
   } catch (error: any) {
