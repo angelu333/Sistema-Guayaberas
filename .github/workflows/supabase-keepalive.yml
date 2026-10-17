@@ -1,0 +1,44 @@
+name: Keep Supabase projects active
+
+on:
+  schedule:
+    # Lunes y jueves a las 15:17 UTC. Así ningún proyecto pasa cuatro días sin ping.
+    - cron: "17 15 * * 1,4"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping-projects:
+    runs-on: ubuntu-latest
+    env:
+      # Se configura como un secreto de GitHub; nunca se imprime en los logs.
+      SUPABASE_KEEPALIVE_PROJECTS: ${{ secrets.SUPABASE_KEEPALIVE_PROJECTS }}
+    steps:
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_KEEPALIVE_PROJECTS"
+          printf '%s' "$SUPABASE_KEEPALIVE_PROJECTS" | jq -e '
+            type == "array" and length > 0 and
+            all(.[]; (.name | type == "string") and (.url | type == "string") and (.anonKey | type == "string"))
+          ' > /dev/null
+
+      - name: Ping every configured Supabase project
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$SUPABASE_KEEPALIVE_PROJECTS" | jq -c '.[]' | while IFS= read -r project; do
+            name=$(printf '%s' "$project" | jq -r '.name')
+            url=$(printf '%s' "$project" | jq -r '.url')
+            anon_key=$(printf '%s' "$project" | jq -r '.anonKey')
+
+            echo "Verificando proyecto: $name"
+            curl --fail --silent --show-error --max-time 20 \
+              --request POST "$url/rest/v1/rpc/keepalive" \
+              --header "apikey: $anon_key" \
+              --header "Authorization: Bearer $anon_key" \
+              --header "Content-Type: application/json" \
+              --data '{}' > /dev/null
+          done
