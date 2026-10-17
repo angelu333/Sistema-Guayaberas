@@ -42,6 +42,8 @@ export interface PublicProductView {
   maxPrice: number;
   availableColors: string[];
   availableSizes: string[];
+  /** Existencia acumulada por talla para el modelo y tipo de manga de la tarjeta. */
+  stockBySize: { sizeName: string; stock: number }[];
   availableSleeves: string[];
   /** Tipo de manga de esta tarjeta (Manga Corta o Manga Larga) */
   sleeveTypeId: string | null;
@@ -401,6 +403,7 @@ export const publicCatalogService = {
           maxPrice: v.salePrice,
           availableColors: [],
           availableSizes: [],
+          stockBySize: [],
           availableSleeves: [],
           sleeveTypeId: v.sleeveTypeId || null,
           sleeveTypeName: v.sleeveType?.name || null,
@@ -420,6 +423,15 @@ export const publicCatalogService = {
 
       if (v.size?.name && !entry.availableSizes.includes(v.size.name)) {
         entry.availableSizes.push(v.size.name);
+      }
+
+      if (v.size?.name) {
+        const sizeStock = entry.stockBySize.find((size) => size.sizeName === v.size?.name);
+        if (sizeStock) {
+          sizeStock.stock += v.totalStock || 0;
+        } else {
+          entry.stockBySize.push({ sizeName: v.size.name, stock: v.totalStock || 0 });
+        }
       }
 
       if (v.sleeveType?.name && !entry.availableSleeves.includes(v.sleeveType.name)) {
@@ -447,6 +459,11 @@ export const publicCatalogService = {
       if (aIsCorta && !bIsCorta) return -1;
       if (!aIsCorta && bIsCorta) return 1;
       return 0;
-    });
+    }).map((product) => ({
+      ...product,
+      stockBySize: product.stockBySize.sort((a, b) =>
+        a.sizeName.localeCompare(b.sizeName, "es-MX", { numeric: true })
+      ),
+    }));
   },
 };

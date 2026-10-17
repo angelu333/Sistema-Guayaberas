@@ -622,6 +622,32 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                         )}
                       </div>
 
+                      {/* Existencia visible por talla, sin necesidad de abrir el modelo */}
+                      {p.stockBySize.length > 0 && (
+                        <div className="pt-1">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#8B7D6B] mb-1">
+                            Existencia por talla
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {p.stockBySize.map(({ sizeName, stock }) => {
+                              const hasStock = stock > 0;
+                              return (
+                                <span
+                                  key={sizeName}
+                                  className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                                    hasStock
+                                      ? "bg-[#EBF0EC] text-[#356847] border-[#A7D7B9]"
+                                      : "bg-[#FAEAEA] text-[#A14A46] border-[#E7B7B2]"
+                                  }`}
+                                >
+                                  T{sizeName} · {hasStock ? `${stock} pzas` : "Agotado"}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {/* Precio */}
                       <div className="flex items-center justify-between mt-auto pt-2 border-t border-[#EDE7DA]">
                         <div>
