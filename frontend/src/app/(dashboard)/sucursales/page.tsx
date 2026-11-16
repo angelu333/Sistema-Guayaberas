@@ -698,6 +698,7 @@ function UserAccountModal({
               >
                 <option value="seller">🛍️ Vendedor / Caja</option>
                 <option value="production">🧵 Taller / Producción</option>
+                <option value="buyer">🛒 Comprador (Solo Catálogo)</option>
                 <option value="admin">👑 Administrador</option>
               </select>
             </div>
@@ -1224,6 +1225,8 @@ function SucursalesUnificadasContent() {
                                   ? "bg-[#FFF5CC] text-[#D89B2B] border-[#F5DFA0]"
                                   : u.role === "production"
                                   ? "bg-purple-50 text-purple-700 border-purple-200"
+                                  : u.role === "buyer"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
                                   : "bg-[#EEF1EE] text-[#556B5D] border-[#D5E0D7]"
                               }`}
                             >
@@ -1231,6 +1234,8 @@ function SucursalesUnificadasContent() {
                                 ? "👑 Administrador"
                                 : u.role === "production"
                                 ? "🧵 Taller / Producción"
+                                : u.role === "buyer"
+                                ? "🛒 Comprador"
                                 : "🛍️ Vendedor / Caja"}
                             </span>
 
