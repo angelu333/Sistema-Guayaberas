@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!["admin", "seller", "production"].includes(role)) {
+    if (!["admin", "seller", "production", "buyer"].includes(role)) {
       return NextResponse.json({ error: "Rol inválido." }, { status: 400 });
     }
 

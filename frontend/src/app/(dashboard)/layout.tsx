@@ -49,7 +49,12 @@ export default function DashboardLayout({
 
           // Control de acceso por rol (RBAC)
           const role = currentSession.role;
-          if (role === "seller") {
+          if (role === "buyer") {
+            // El comprador solo accede al catálogo digital, no al dashboard
+            const tenantSlug = currentSession.tenantSlug || "catalogo";
+            router.push(`/catalogo/${tenantSlug}`);
+            return;
+          } else if (role === "seller") {
             // Rutas exclusivas del admin — el seller NO puede acceder
             const adminOnlyPaths = [
               "/produccion",

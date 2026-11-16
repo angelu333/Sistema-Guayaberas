@@ -8,7 +8,7 @@
 
 export type PlanType = "trial" | "basic" | "pro" | "enterprise";
 export type PlanStatus = "active" | "suspended" | "cancelled";
-export type UserRole = "admin" | "seller" | "production";
+export type UserRole = "admin" | "seller" | "production" | "buyer";
 
 export interface Tenant {
   id: string;

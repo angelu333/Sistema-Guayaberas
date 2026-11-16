@@ -182,6 +182,8 @@ export function Sidebar({ isMobileOpen = false, onCloseMobile }: SidebarProps) {
                 ? "Administrador"
                 : session?.role === "production"
                 ? "Producción"
+                : session?.role === "buyer"
+                ? "Comprador"
                 : "Vendedor"}
             </span>
           </div>

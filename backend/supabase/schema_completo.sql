@@ -1,7 +1,18 @@
 -- ==============================================================================
 -- SISTEMA GUAYABERAS — SCHEMA MAESTRO COMPLETO Y ACTUALIZADO
 -- Ejecutar este archivo completo en el SQL Editor de un nuevo proyecto de Supabase
--- Incluye: 32 Tablas, Triggers, RLS, Storage Bucket 'product-images' y Funciones
+-- Instalación en una base NUEVA; NO actualiza bases existentes.
+-- No ejecutar migraciones históricas encima de este archivo consolidado.
+-- Ver GUIA_BASE_NUEVA_Y_MIGRACION.md para importar una sola tienda.
+
+BEGIN;
+
+DO $$
+BEGIN
+  IF to_regclass('public.tenants') IS NOT NULL THEN
+    RAISE EXCEPTION 'Instalación cancelada: ya existe public.tenants. Use una migración incremental para bases existentes.';
+  END IF;
+END $$;
 -- ==============================================================================
 
 -- 1. Extensiones necesarias
@@ -77,7 +88,7 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
   tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   location_id UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
   full_name   TEXT NOT NULL,
-  role        TEXT NOT NULL DEFAULT 'seller' CHECK (role IN ('admin', 'seller', 'production')),
+  role        TEXT NOT NULL DEFAULT 'seller' CHECK (role IN ('admin', 'seller', 'production', 'buyer')),
   is_active   BOOLEAN NOT NULL DEFAULT true,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -288,32 +299,46 @@ CREATE TABLE IF NOT EXISTS public.pagos_venta (
 -- 9. COTIZACIONES
 -- ==============================================================================
 
+CREATE TABLE IF NOT EXISTS public.rangos_mayoreo (
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name              TEXT NOT NULL,
+    min_quantity      INTEGER NOT NULL CHECK (min_quantity >= 1),
+    max_quantity      INTEGER CHECK (max_quantity >= min_quantity),
+    discount_percent  NUMERIC(5,2) NOT NULL DEFAULT 0 CHECK (discount_percent >= 0 AND discount_percent <= 100),
+    is_active         BOOLEAN NOT NULL DEFAULT true,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.cotizaciones (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  folio       TEXT NOT NULL,
-  client_id   UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
-  user_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  subtotal    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  discount    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  total       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  status      TEXT NOT NULL DEFAULT 'pendiente' CHECK (status IN ('pendiente', 'aprobada', 'rechazada', 'vencida')),
-  notes       TEXT,
-  valid_until DATE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT uq_quote_folio_per_tenant UNIQUE (tenant_id, folio)
+    id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id        UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    quote_number     TEXT NOT NULL,
+    client_id        UUID REFERENCES public.clientes(id) ON DELETE SET NULL,
+    client_name      TEXT NOT NULL,
+    client_phone     TEXT,
+    status           TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent', 'accepted', 'rejected', 'converted')),
+    total_pieces     INTEGER NOT NULL DEFAULT 0,
+    subtotal         NUMERIC(10,2) NOT NULL DEFAULT 0,
+    discount_amount  NUMERIC(10,2) NOT NULL DEFAULT 0,
+    total_amount     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    valid_days       INTEGER NOT NULL DEFAULT 15,
+    notes            TEXT,
+    created_by       UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.detalle_cotizaciones (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  quote_id    UUID NOT NULL REFERENCES public.cotizaciones(id) ON DELETE CASCADE,
-  variant_id  UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
-  quantity    INTEGER NOT NULL CHECK (quantity > 0),
-  unit_price  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  discount    NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  total       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id         UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    quote_id          UUID NOT NULL REFERENCES public.cotizaciones(id) ON DELETE CASCADE,
+    variant_id        UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
+    quantity          INTEGER NOT NULL CHECK (quantity > 0),
+    unit_price        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    discount_percent  NUMERIC(5,2) NOT NULL DEFAULT 0,
+    final_unit_price  NUMERIC(10,2) NOT NULL DEFAULT 0,
+    subtotal          NUMERIC(10,2) NOT NULL DEFAULT 0,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ==============================================================================
@@ -321,82 +346,93 @@ CREATE TABLE IF NOT EXISTS public.detalle_cotizaciones (
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS public.proveedores (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  contact     TEXT,
-  phone       TEXT,
-  email       TEXT,
-  address     TEXT,
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name          TEXT NOT NULL,
+    contact_name  TEXT,
+    phone         TEXT,
+    email         TEXT,
+    type          TEXT NOT NULL DEFAULT 'telas' CHECK (type IN ('taller', 'telas', 'insumos', 'bordado', 'otro')),
+    city          TEXT,
+    notes         TEXT,
+    is_active     BOOLEAN NOT NULL DEFAULT true,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.insumos (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  unit        TEXT NOT NULL DEFAULT 'metro',
-  stock       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  min_stock   NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  cost_unit   NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id      UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name           TEXT NOT NULL,
+    category       TEXT NOT NULL DEFAULT 'tela' CHECK (category IN ('tela', 'boton', 'hilo', 'etiqueta', 'otro')),
+    unit           TEXT NOT NULL DEFAULT 'metros' CHECK (unit IN ('metros', 'piezas', 'rollos', 'gramos')),
+    current_stock  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (current_stock >= 0),
+    min_stock      NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (min_stock >= 0),
+    cost_per_unit  NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (cost_per_unit >= 0),
+    supplier_id    UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
+    is_active      BOOLEAN NOT NULL DEFAULT true,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.recetas_produccion (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  product_id  UUID NOT NULL REFERENCES public.productos(id) ON DELETE CASCADE,
-  input_id    UUID NOT NULL REFERENCES public.insumos(id) ON DELETE CASCADE,
-  quantity    NUMERIC(12, 4) NOT NULL DEFAULT 1.0,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id       UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    product_id      UUID NOT NULL REFERENCES public.productos(id) ON DELETE CASCADE,
+    insumo_id       UUID NOT NULL REFERENCES public.insumos(id) ON DELETE CASCADE,
+    quantity_needed NUMERIC(10,2) NOT NULL CHECK (quantity_needed > 0),
+    notes           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_product_insumo UNIQUE (product_id, insumo_id)
 );
 
 CREATE TABLE IF NOT EXISTS public.etapas_produccion (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  sort_order  INTEGER NOT NULL DEFAULT 0,
-  is_active   BOOLEAN NOT NULL DEFAULT true,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    sort_order  INTEGER NOT NULL DEFAULT 1,
+    is_final    BOOLEAN NOT NULL DEFAULT false,
+    is_active   BOOLEAN NOT NULL DEFAULT true,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.ordenes_produccion (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  folio       TEXT NOT NULL,
-  variant_id  UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
-  stage_id    UUID REFERENCES public.etapas_produccion(id) ON DELETE SET NULL,
-  quantity    INTEGER NOT NULL CHECK (quantity > 0),
-  status      TEXT NOT NULL DEFAULT 'en_proceso' CHECK (status IN ('pendiente', 'en_proceso', 'terminada', 'cancelada')),
-  notes       TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  finished_at TIMESTAMPTZ,
-  CONSTRAINT uq_order_folio_per_tenant UNIQUE (tenant_id, folio)
+    id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id          UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    order_number       TEXT NOT NULL,
+    variant_id         UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
+    current_stage_id   UUID REFERENCES public.etapas_produccion(id) ON DELETE SET NULL,
+    target_quantity    INTEGER NOT NULL CHECK (target_quantity > 0),
+    completed_quantity INTEGER NOT NULL DEFAULT 0 CHECK (completed_quantity >= 0),
+    status             TEXT NOT NULL DEFAULT 'in_progress' CHECK (status IN ('in_progress', 'completed', 'cancelled')),
+    assigned_to        TEXT,
+    target_location_id UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
+    notes              TEXT,
+    created_by         UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at       TIMESTAMPTZ
 );
 
 CREATE TABLE IF NOT EXISTS public.compras (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  supplier_id UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
-  folio       TEXT NOT NULL,
-  total       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  status      TEXT NOT NULL DEFAULT 'completada' CHECK (status IN ('pendiente', 'completada', 'cancelada')),
-  notes       TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT uq_purchase_folio_per_tenant UNIQUE (tenant_id, folio)
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    order_number  TEXT NOT NULL,
+    supplier_id   UUID REFERENCES public.proveedores(id) ON DELETE SET NULL,
+    status        TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'received', 'cancelled')),
+    total_cost    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    notes         TEXT,
+    created_by    UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    received_at   TIMESTAMPTZ,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.detalle_compras (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  purchase_id UUID NOT NULL REFERENCES public.compras(id) ON DELETE CASCADE,
-  input_id    UUID REFERENCES public.insumos(id) ON DELETE RESTRICT,
-  quantity    NUMERIC(12, 2) NOT NULL CHECK (quantity > 0),
-  unit_price  NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  total       NUMERIC(12, 2) NOT NULL DEFAULT 0.00,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    purchase_id   UUID NOT NULL REFERENCES public.compras(id) ON DELETE CASCADE,
+    variant_id    UUID NOT NULL REFERENCES public.variantes_producto(id) ON DELETE RESTRICT,
+    quantity      INTEGER NOT NULL CHECK (quantity > 0),
+    unit_cost     NUMERIC(10,2) NOT NULL DEFAULT 0,
+    location_id   UUID REFERENCES public.ubicaciones(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ==============================================================================
@@ -404,14 +440,16 @@ CREATE TABLE IF NOT EXISTS public.detalle_compras (
 -- ==============================================================================
 
 CREATE TABLE IF NOT EXISTS public.auditoria (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id   UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
-  user_id     UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  action      TEXT NOT NULL,
-  module      TEXT NOT NULL,
-  details     JSONB,
-  ip_address  TEXT,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id     UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
+    entity        TEXT NOT NULL CHECK (entity IN ('PRODUCTO', 'PRECIO', 'INVENTARIO', 'VENTA', 'CLIENTE', 'USUARIO')),
+    action        TEXT NOT NULL CHECK (action IN ('CREAR', 'ACTUALIZAR', 'ELIMINAR', 'AJUSTE', 'CANCELAR')),
+    record_id     UUID,
+    details       TEXT NOT NULL,
+    old_data      JSONB,
+    new_data      JSONB,
+    user_id       UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS public.push_subscriptions (
@@ -496,22 +534,62 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Se conserva por compatibilidad con instalaciones anteriores que la usan en
+-- push_subscriptions. Las demás tablas usan la función genérica anterior.
+CREATE OR REPLACE FUNCTION public.update_push_subscription_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 -- Función para generar folios de transferencia
+-- Secuencias: dos solicitudes simultáneas no reciben el mismo folio.
+CREATE SEQUENCE public.ticket_number_seq;
+CREATE SEQUENCE public.transfer_folio_seq;
+
+CREATE OR REPLACE FUNCTION public.generate_ticket_number(p_tenant_id UUID)
+RETURNS TEXT
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+DECLARE v_number TEXT; v_ticket TEXT;
+BEGIN
+  IF auth.uid() IS NULL OR p_tenant_id IS DISTINCT FROM public.get_current_tenant_id() THEN
+    RAISE EXCEPTION 'Negocio no autorizado';
+  END IF;
+  LOOP
+    v_number := nextval('public.ticket_number_seq')::TEXT;
+    v_ticket := 'TK-' || to_char(now(), 'YYYYMMDD') || '-' || lpad(v_number, greatest(4, length(v_number)), '0');
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM public.ventas WHERE tenant_id = p_tenant_id AND ticket_number = v_ticket);
+  END LOOP;
+  RETURN v_ticket;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.generate_ticket_number(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.generate_ticket_number(UUID) TO authenticated;
+
 CREATE OR REPLACE FUNCTION public.generate_transfer_folio(p_tenant_id UUID)
 RETURNS TEXT AS $$
 DECLARE
   v_date TEXT;
-  v_count INTEGER;
+  v_number TEXT;
   v_folio TEXT;
 BEGIN
   v_date := TO_CHAR(now(), 'YYYYMMDD');
-  SELECT COUNT(*) + 1 INTO v_count
-  FROM public.transferencias
-  WHERE tenant_id = p_tenant_id AND created_at::DATE = CURRENT_DATE;
-  v_folio := 'TRF-' || v_date || '-' || LPAD(v_count::TEXT, 4, '0');
+  IF auth.uid() IS NULL OR p_tenant_id IS DISTINCT FROM public.get_current_tenant_id() THEN
+    RAISE EXCEPTION 'Negocio no autorizado';
+  END IF;
+  LOOP
+    v_number := nextval('public.transfer_folio_seq')::TEXT;
+    v_folio := 'TRF-' || v_date || '-' || lpad(v_number, greatest(4, length(v_number)), '0');
+    EXIT WHEN NOT EXISTS (SELECT 1 FROM public.transferencias WHERE tenant_id = p_tenant_id AND folio = v_folio);
+  END LOOP;
   RETURN v_folio;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+REVOKE ALL ON FUNCTION public.generate_transfer_folio(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.generate_transfer_folio(UUID) TO authenticated;
 
 -- Trigger automático para descontar/sumar existencias por movimiento de inventario
 CREATE OR REPLACE FUNCTION public.update_stock_on_movement()
@@ -520,6 +598,8 @@ DECLARE
   v_current_qty INTEGER := 0;
   v_new_qty INTEGER := 0;
 BEGIN
+  -- Serializa movimientos del mismo SKU/sucursal, incluso sin existencia previa.
+  PERFORM pg_advisory_xact_lock(hashtextextended(NEW.variant_id::text || '/' || NEW.location_id::text, 0));
   SELECT quantity INTO v_current_qty
   FROM public.existencias
   WHERE variant_id = NEW.variant_id AND location_id = NEW.location_id;
@@ -640,6 +720,7 @@ ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.detalle_ventas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pagos_venta ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rangos_mayoreo ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cotizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.detalle_cotizaciones ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
@@ -702,6 +783,9 @@ CREATE POLICY "ventas_isolation" ON public.ventas FOR ALL USING (tenant_id = pub
 CREATE POLICY "detalle_ventas_isolation" ON public.detalle_ventas FOR ALL USING (tenant_id = public.get_current_tenant_id());
 CREATE POLICY "pagos_venta_isolation" ON public.pagos_venta FOR ALL USING (tenant_id = public.get_current_tenant_id());
 
+CREATE POLICY "rangos_mayoreo_select" ON public.rangos_mayoreo FOR SELECT USING (true);
+CREATE POLICY "rangos_mayoreo_own" ON public.rangos_mayoreo FOR ALL USING (tenant_id = public.get_current_tenant_id());
+
 CREATE POLICY "cotizaciones_public" ON public.cotizaciones FOR SELECT USING (true);
 CREATE POLICY "cotizaciones_own" ON public.cotizaciones FOR ALL USING (tenant_id = public.get_current_tenant_id());
 
@@ -737,6 +821,51 @@ CREATE INDEX IF NOT EXISTS idx_detalle_ventas_sale ON public.detalle_ventas(sale
 CREATE INDEX IF NOT EXISTS idx_cotizaciones_tenant ON public.cotizaciones(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_movimientos_created ON public.movimientos_inventario(created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_pagos_sale ON public.pagos_venta(sale_id);
+CREATE INDEX IF NOT EXISTS idx_pagos_tenant ON public.pagos_venta(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_rangos_tenant ON public.rangos_mayoreo(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_detalle_cotizaciones_quote ON public.detalle_cotizaciones(quote_id);
+CREATE INDEX IF NOT EXISTS idx_compras_tenant ON public.compras(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_ordenes_tenant ON public.ordenes_produccion(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_auditoria_tenant ON public.auditoria(tenant_id);
+
+CREATE TRIGGER trigger_tenants_updated_at
+  BEFORE UPDATE ON public.tenants
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trigger_tenant_plans_updated_at
+  BEFORE UPDATE ON public.tenant_plans
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trigger_tenant_settings_updated_at
+  BEFORE UPDATE ON public.tenant_settings
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trigger_user_profiles_updated_at
+  BEFORE UPDATE ON public.user_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trigger_productos_updated_at
+  BEFORE UPDATE ON public.productos
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trigger_variantes_updated_at
+  BEFORE UPDATE ON public.variantes_producto
+  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+
+CREATE TRIGGER trg_push_subscriptions_updated_at
+  BEFORE UPDATE ON public.push_subscriptions
+  FOR EACH ROW EXECUTE FUNCTION public.update_push_subscription_timestamp();
+
+-- Permisos SQL explícitos; RLS sigue controlando el acceso a cada fila.
+GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
 -- ==============================================================================
 -- FIN DEL SCHEMA MAESTRO
 -- ==============================================================================
+
+COMMIT;
