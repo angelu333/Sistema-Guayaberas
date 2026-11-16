@@ -20,8 +20,10 @@ import {
   Copy,
   Link2,
   ArrowLeft,
+  LogOut,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
+import { authService } from "@/services/auth.service";
 import {
   publicCatalogService,
   type PublicTenantInfo,
@@ -37,7 +39,19 @@ function PublicCatalogContent({ slug }: { slug: string }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
-  const { session } = useAuthStore();
+  const { session, logout } = useAuthStore();
+
+  const handleLogout = async () => {
+    try {
+      await authService.logout();
+      logout();
+      router.push("/login");
+    } catch (err) {
+      console.error("Error al cerrar sesión:", err);
+      logout();
+      router.push("/login");
+    }
+  };
 
   const [tenantInfo, setTenantInfo] = useState<PublicTenantInfo | null>(null);
   const [filterOptions, setFilterOptions] = useState<PublicFilterOptions>({
@@ -257,8 +271,8 @@ function PublicCatalogContent({ slug }: { slug: string }) {
 
           {/* Acciones de Cabecera */}
           <div className="flex items-center gap-2 shrink-0">
-            {/* Botón Volver al Panel (Solo para usuarios autenticados / administradores) */}
-            {session && (
+            {/* Botón Volver al Panel (Solo para roles con acceso al dashboard) */}
+            {session && session.role !== "buyer" && (
               <Link
                 href="/dashboard"
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-[#26302B] hover:bg-[#323D37] text-[#FAF7F2] border border-[#26302B] transition-all shadow-xs cursor-pointer"
@@ -268,6 +282,18 @@ function PublicCatalogContent({ slug }: { slug: string }) {
                 <span className="hidden sm:inline">Volver al Panel</span>
                 <span className="sm:hidden">Panel</span>
               </Link>
+            )}
+
+            {/* Botón Cerrar Sesión (Para cualquier usuario autenticado) */}
+            {session && (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl bg-[#FAF7F2] hover:bg-[#FAEAEA] text-[#B85450] border border-[#E4DDD1] hover:border-[#B85450]/40 transition-all shadow-xs cursor-pointer"
+                title="Cerrar sesión"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Salir</span>
+              </button>
             )}
 
             {/* Botón Copiar Enlace */}
